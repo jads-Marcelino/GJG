@@ -10,6 +10,7 @@ Apresentações e fundos de reunião da Meridiano, para compartilhar.
 | Data Strategy for Leaders · Dark | https://jads-marcelino.github.io/GJG/apresentacoes/data-strategy-for-leaders/Data-Strategy-for-Leaders.html |
 | Data Strategy for Leaders · Light | https://jads-marcelino.github.io/GJG/apresentacoes/data-strategy-for-leaders/Data-Strategy-for-Leaders-light.html |
 | Apresentação institucional | https://jads-marcelino.github.io/GJG/apresentacoes/institucional/Meridiano-Institucional.html |
+| Guias de discovery · planos de saúde (PT · EN · ES) | https://jads-marcelino.github.io/GJG/discovery/ |
 | Fundos de reunião v2 (por sócio) | [`fundos-reuniao/v2/`](fundos-reuniao/v2/) |
 | Fundos de reunião v1 | [`fundos-reuniao/v1/`](fundos-reuniao/v1/) |
 
