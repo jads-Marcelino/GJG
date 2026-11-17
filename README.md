@@ -9,7 +9,9 @@ Apresentações e fundos de reunião da Meridiano, para compartilhar.
 | Data Strategy for Leaders · Daylight | https://jads-marcelino.github.io/GJG/apresentacoes/data-strategy-for-leaders/Data-Strategy-for-Leaders-daylight.html |
 | Data Strategy for Leaders · Dark | https://jads-marcelino.github.io/GJG/apresentacoes/data-strategy-for-leaders/Data-Strategy-for-Leaders.html |
 | Data Strategy for Leaders · Light | https://jads-marcelino.github.io/GJG/apresentacoes/data-strategy-for-leaders/Data-Strategy-for-Leaders-light.html |
-| Apresentação institucional | https://jads-marcelino.github.io/GJG/apresentacoes/institucional/Meridiano-Institucional.html |
+| Apresentação institucional · Dark | https://jads-marcelino.github.io/GJG/apresentacoes/institucional/Meridiano-Institucional.html |
+| Apresentação institucional · Light | https://jads-marcelino.github.io/GJG/apresentacoes/institucional/Meridiano-Institucional-light.html |
+| Apresentação institucional · Daylight | https://jads-marcelino.github.io/GJG/apresentacoes/institucional/Meridiano-Institucional-daylight.html |
 | Guias de discovery · planos de saúde (PT · EN · ES) | https://jads-marcelino.github.io/GJG/discovery/ |
 | Assessments (resultados e cópias preenchidas) | https://jads-marcelino.github.io/GJG/assessments/ |
 | Guía de Discovery · Operación Sonrisa Panamá (PDF) | https://jads-marcelino.github.io/GJG/discovery/sonrisa/Guia-Discovery-Operacion-Sonrisa-Panama.pdf |
