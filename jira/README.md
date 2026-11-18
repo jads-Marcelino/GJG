@@ -1,46 +1,45 @@
-# Meridiano · Quadro
+# Meridiano · Board
 
-Kanban leve da equipe: **Backlog → A fazer → Fazendo → Revisão → Feito**.
+Lightweight team kanban: **Backlog → To do → Doing → Review → Done**. Available in **English, Español and Português**. It opens in your device's language, and you can switch with the EN · ES · PT selector.
 
-**Abrir:** https://jads-marcelino.github.io/GJG/jira/
+**Open:** https://jads-marcelino.github.io/GJG/jira/
 
-## Como funciona
+## How it works
 
-- **Entrar:** escolha seu nome na tela inicial. O quadro lembra de você neste aparelho. Para trocar, toque no seu nome no canto superior direito.
-- **Responsável:** só quem é responsável pela tarefa a move entre as raias. Os demais comentam, anexam e editam o texto.
-- **Definição de pronto:** cada tarefa tem uma lista de critérios. Ela só é cobrada ao mover para Revisão ou para Feito. Nesses dois casos todos os itens precisam estar marcados. A regra também vale no banco de dados.
-- **Revisão (opcional):** se a tarefa precisa de validação, o responsável envia para Revisão e escolhe quem valida. Quem revisa pode **aprovar** ou **pedir ajustes**. Pedir ajustes exige comentário e devolve a tarefa para Fazendo. Quando todos aprovam, a tarefa vai sozinha para Feito. Se não precisa de validação, o responsável move direto para Feito.
-- **Prioridade:** Alta, Média ou Baixa. As tarefas de prioridade Alta ficam no topo de cada raia.
-- **Cronômetro:** iniciar coloca a tarefa em Fazendo. O cronômetro pausa sozinho quando a tarefa sai de Fazendo.
-- **Anexos:** arquivos de até 50 MB, guardados em bucket privado com links temporários, além de links (Drive, Figma, Notion).
-- Tema claro e escuro, busca, filtros ("Minhas", "Para eu revisar", "Prioridade alta") e atualização em tempo real.
+- **Sign in:** pick your name on the first screen. The board remembers you on that device.
+- **Owner:** only the task owner moves it between lanes. Everyone else can comment, attach and edit text.
+- **Definition of done:** a checklist on each task. It's only required when moving to **Review** or **Done**, and then every item must be checked. The database enforces this too.
+- **Review (optional):** if the task needs validation, send it to Review and choose the reviewers. They can **approve** or **request changes** (a comment is required, and the task goes back to Doing). When everyone approves, the task moves to Done on its own. If it doesn't need validation, the owner moves it straight to Done.
+- **Priority:** High, Medium or Low. High-priority tasks sit at the top of each lane.
+- **Timer:** starting it moves the task to Doing. It pauses on its own when the task leaves Doing.
+- **Attachments:** files up to 50 MB (private storage, temporary links) and links (Drive, Figma, Notion).
+- **Notifications:**
+  - The bell shows what changed since your last visit.
+  - The **Notify the group** button opens WhatsApp with a ready-made message in your language.
+  - `…/jira/#MER-12` opens a task directly.
 
-## Avisos
+Add `?demo` to the link to try the board with in-memory test data. Nothing is saved.
 
-- **Grupo do WhatsApp:** depois de criar uma tarefa, enviar para revisão, pedir ajustes ou concluir, aparece o botão **Avisar no grupo**. Ele abre o WhatsApp com a mensagem pronta (quem fez, o que mudou e o link direto da tarefa). É só escolher o grupo e enviar.
-- **Sininho de novidades:** mostra o que mudou desde a sua última visita: tarefas criadas por outras pessoas, pedidos de revisão para você, ajustes e aprovações nas suas tarefas e comentários.
-- **Link direto:** `…/jira/#MER-12` abre a tarefa.
-
-`?demo` no fim do link abre uma versão de teste com dados em memória, que não grava nada.
-
-## Conectar no Claude ou no ChatGPT (MCP)
-
-URL do servidor MCP:
+## Connect Claude or ChatGPT (MCP)
 
 ```
 https://oqokqkrczmdnhfwiwwdv.supabase.co/functions/v1/jira-mcp
 ```
 
-- **Claude:** Configurações → Conectores → Adicionar conector personalizado → cole a URL (sem autenticação).
-- **ChatGPT:** Configurações → Apps e conectores → Avançado → Modo desenvolvedor → Criar → cole a URL, autenticação "Nenhuma".
+- **Claude:** Settings → Connectors → Add custom connector → paste the URL (no authentication).
+- **ChatGPT:** Settings → Apps & Connectors → Advanced → Developer mode → Create → paste the URL, authentication "None".
 
-Depois é só pedir, por exemplo: *"Sou a Jeny Ventura. Crie uma tarefa de prioridade alta para revisar o contrato, com definição de pronto: cláusulas revisadas; versão final anexada."*
+Then just ask, in any language, for example: *"I'm Jeny Ventura. Create a high-priority task to review the contract, with definition of done: clauses reviewed; final version attached."*
 
-Ferramentas: `list_members`, `list_tasks`, `get_task`, `create_task`, `update_task`, `move_task`, `set_definition_of_done`, `check_done_item`, `send_to_review`, `review_task`, `add_comment`, `timer`, `add_link`. Toda escrita informa quem está agindo (`person`) e segue as mesmas regras do app (`move_task` aceita `done` quando a definição de pronto está completa).
+Tools: `list_members`, `list_tasks`, `get_task`, `create_task`, `update_task`, `move_task`, `set_definition_of_done`, `check_done_item`, `send_to_review`, `review_task`, `add_comment`, `timer`, `add_link`.
 
-## Técnico
+## Resumen en español
 
-- `index.html` + `app.js`: app estático, sem build.
-- Dados no Supabase (projeto `oqokqkrczmdnhfwiwwdv`): tabelas `jira_members`, `jira_tasks`, `jira_comments`, `jira_files`, bucket privado `jira-files`, funções `jira_approve` e `jira_timer` e o gatilho `jira_guard_status`. O esquema está em `supabase.sql`.
-- `mcp/index.ts`: servidor MCP (Supabase Edge Function `jira-mcp`, Streamable HTTP).
-- **Segurança:** o login é só por nome, por decisão da equipe. Qualquer pessoa com o link (ou com a URL do MCP) consegue ler e alterar o quadro. Não guarde aqui informação sensível.
+Tablero de tareas del equipo en inglés, español y portugués. Para entrar, eliges tu nombre. Solo el responsable mueve sus tareas. Para pasar a **Revisión** o a **Hecho**, la *definición de terminado* tiene que estar completa. La revisión es opcional; si la tarea está en revisión, pasa a Hecho cuando todos los revisores aprueban. El servidor MCP (URL de arriba) permite crear y mover tareas desde Claude o ChatGPT.
+
+## Technical
+
+- `index.html` + `app.js`: static app, no build step. The translations live in `I18N` inside `app.js`.
+- Data lives in Supabase (project `oqokqkrczmdnhfwiwwdv`): tables `jira_*`, the private bucket `jira-files`, the functions `jira_approve` and `jira_timer`, and the trigger `jira_guard_status`. See `supabase.sql`.
+- `mcp/index.ts`: the MCP server (Supabase Edge Function `jira-mcp`, Streamable HTTP).
+- **Security:** sign-in is by name only, as the team decided. Anyone with the link or the MCP URL can read and change the board. Don't store sensitive information here.
