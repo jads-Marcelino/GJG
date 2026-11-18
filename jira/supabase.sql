@@ -1,5 +1,5 @@
 -- Meridiano · Quadro — esquema aplicado no Supabase (migrations jira_board_init, jira_task_number,
--- jira_definition_of_done, jira_grants_service_role, jira_optional_review). Referência; já está aplicado.
+-- jira_definition_of_done, jira_grants_service_role, jira_optional_review, jira_messages_english). Referência; já está aplicado.
 -- Tabelas: jira_members, jira_tasks (status, priority, owner_id, reviewers, approvals, dod, cronômetro, number),
 -- jira_comments, jira_files. Bucket privado: jira-files.
 -- Regras no banco:

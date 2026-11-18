@@ -1,9 +1,9 @@
-// Meridiano · Quadro — servidor MCP (Streamable HTTP, respostas JSON).
-// Publicado como Supabase Edge Function "jira-mcp". Conecte no Claude (conector personalizado)
-// ou no ChatGPT (modo desenvolvedor) com a URL:
+// Meridiano · Board — MCP server (Streamable HTTP, JSON responses).
+// Deployed as Supabase Edge Function "jira-mcp". Connect from Claude (custom connector)
+// or ChatGPT (developer mode) with:
 //   https://oqokqkrczmdnhfwiwwdv.supabase.co/functions/v1/jira-mcp
-// Mesmas regras do app: só o responsável move a tarefa; Revisão e Feito exigem definição de pronto completa;
-// a revisão é opcional, mas uma tarefa em Revisão só vai para Feito com a aprovação de todos os revisores.
+// Same rules as the app: only the owner moves a task; Review and Done require a complete definition of done;
+// review is optional, but a task in Review only reaches Done when every reviewer approves.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const sb = createClient(
@@ -13,14 +13,15 @@ const sb = createClient(
 );
 
 const APP_URL = "https://jads-marcelino.github.io/GJG/jira/";
-const LANES: Record<string, string> = { backlog: "Backlog", todo: "A fazer", doing: "Fazendo", review: "Revisão", done: "Feito" };
-const PRI: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa" };
+const LANES: Record<string, string> = { backlog: "Backlog", todo: "To do", doing: "Doing", review: "Review", done: "Done" };
+const PRI: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
 const LANE_ALIASES: Record<string, string> = {
-  backlog: "backlog", todo: "todo", "to do": "todo", "a fazer": "todo", fazer: "todo",
-  doing: "doing", fazendo: "doing", "em andamento": "doing", andamento: "doing", "in progress": "doing",
-  review: "review", revisao: "review", "em revisao": "review", done: "done", feito: "done", concluido: "done",
+  backlog: "backlog", todo: "todo", "to do": "todo", "a fazer": "todo", "por hacer": "todo", pendiente: "todo",
+  doing: "doing", "in progress": "doing", fazendo: "doing", "em andamento": "doing", "en curso": "doing", haciendo: "doing",
+  review: "review", "in review": "review", revisao: "review", "em revisao": "review", revision: "review", "en revision": "review",
+  done: "done", feito: "done", concluido: "done", hecho: "done", terminado: "done", finished: "done",
 };
-const PRI_ALIASES: Record<string, string> = { high: "high", alta: "high", medium: "medium", media: "medium", low: "low", baixa: "low" };
+const PRI_ALIASES: Record<string, string> = { high: "high", alta: "high", medium: "medium", media: "medium", low: "low", baixa: "low", baja: "low" };
 
 class UserError extends Error {}
 const norm = (s: unknown) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -38,33 +39,33 @@ async function members(): Promise<Member[]> {
 async function person(name: unknown, ms?: Member[]): Promise<Member> {
   ms = ms ?? await members();
   const q = norm(name);
-  if (!q) throw new UserError(`Informe quem está agindo no campo "person". Pessoas da equipe: ${ms.map((m) => m.name).join(", ")}.`);
+  if (!q) throw new UserError(`Say who is acting in the "person" field. Team: ${ms.map((m) => m.name).join(", ")}.`);
   let hit = ms.filter((m) => norm(m.name) === q);
   if (!hit.length) hit = ms.filter((m) => norm(m.name).includes(q));
   if (!hit.length) hit = ms.filter((m) => q.split(/\s+/).every((w) => norm(m.name).includes(w)));
   if (hit.length === 1) return hit[0];
-  if (hit.length > 1) throw new UserError(`"${name}" é ambíguo: ${hit.map((m) => m.name).join(", ")}. Use o nome completo.`);
-  throw new UserError(`Não encontrei "${name}" na equipe. Pessoas: ${ms.map((m) => m.name).join(", ")}.`);
+  if (hit.length > 1) throw new UserError(`"${name}" is ambiguous: ${hit.map((m) => m.name).join(", ")}. Use the full name.`);
+  throw new UserError(`"${name}" is not on the team. Team: ${ms.map((m) => m.name).join(", ")}.`);
 }
 async function task(ref: unknown): Promise<Task> {
   const r = String(ref ?? "").trim();
-  if (!r) throw new UserError('Informe a tarefa em "task" (ex.: MER-12).');
+  if (!r) throw new UserError('Give the task in "task" (e.g. MER-12).');
   const n = r.match(/^(?:mer-?)?(\d+)$/i);
   const q = sb.from("jira_tasks").select("*");
   const rows = check(n ? await q.eq("number", Number(n[1])) : await q.eq("id", r)) as Task[];
-  if (!rows.length) throw new UserError(`Tarefa ${r} não encontrada.`);
+  if (!rows.length) throw new UserError(`Task ${r} not found.`);
   return rows[0];
 }
 const code = (t: Task) => `MER-${t.number}`;
 const dodOk = (t: Task) => Array.isArray(t.dod) && t.dod.length > 0 && t.dod.every((i: any) => i.done);
 const lane = (v: unknown) => {
   const k = LANE_ALIASES[norm(v)];
-  if (!k) throw new UserError(`Raia inválida: ${v}. Use backlog, todo, doing, review ou done.`);
+  if (!k) throw new UserError(`Invalid lane: ${v}. Use backlog, todo, doing, review or done.`);
   return k;
 };
 const priority = (v: unknown) => {
   const k = PRI_ALIASES[norm(v)];
-  if (!k) throw new UserError(`Prioridade inválida: ${v}. Use high, medium ou low.`);
+  if (!k) throw new UserError(`Invalid priority: ${v}. Use high, medium or low.`);
   return k;
 };
 function spent(t: Task) {
@@ -80,60 +81,60 @@ function summary(t: Task, ms: Member[]) {
     owner: t.owner_id ? nm(t.owner_id) : null,
     definition_of_done: d.map((i: any, ix: number) => `${ix + 1}. [${i.done ? "x" : " "}] ${i.text}`),
     reviewers: (t.reviewers || []).map((r: string) => ({ name: nm(r), approved: !!(t.approvals || {})[r] })),
-    time_spent: spent(t), timer_running: !!t.timer_started_at, updated_at: t.updated_at,
+    time_spent: spent(t), timer_running: !!t.timer_started_at, updated_at: t.updated_at, link: `${APP_URL}#${code(t)}`,
   };
 }
 function mustOwn(t: Task, who: Member) {
-  if (t.owner_id && t.owner_id !== who.id) throw new UserError(`Só o responsável pela tarefa ${code(t)} pode movê-la.`);
+  if (t.owner_id && t.owner_id !== who.id) throw new UserError(`Only the owner of ${code(t)} can move it.`);
 }
 
 /* ---------------- tools ---------------- */
-const P = { type: "string", description: "Nome da pessoa da equipe que está fazendo a ação (ex.: Jeny Ventura)." };
-const T = { type: "string", description: "Código da tarefa, ex.: MER-12." };
+const P = { type: "string", description: "Name of the team member doing the action (e.g. Jeny Ventura)." };
+const T = { type: "string", description: "Task code, e.g. MER-12." };
 const tools = [
-  { name: "list_members", description: "Lista as pessoas da equipe.", inputSchema: { type: "object", properties: {} } ,
+  { name: "list_members", description: "List the team members.", inputSchema: { type: "object", properties: {} },
     annotations: { readOnlyHint: true } },
-  { name: "list_tasks", description: "Lista tarefas do quadro, com filtros opcionais.", annotations: { readOnlyHint: true },
+  { name: "list_tasks", description: "List board tasks, with optional filters.", annotations: { readOnlyHint: true },
     inputSchema: { type: "object", properties: {
       status: { type: "string", enum: ["backlog", "todo", "doing", "review", "done"] },
-      owner: { type: "string", description: "Nome do responsável" },
+      owner: { type: "string", description: "Owner's name" },
       priority: { type: "string", enum: ["high", "medium", "low"] },
-      search: { type: "string", description: "Texto no título ou descrição" },
-      pending_review_for: { type: "string", description: "Nome de quem precisa revisar" } } } },
-  { name: "get_task", description: "Detalhes de uma tarefa: descrição, definição de pronto, revisores, anexos e comentários.", annotations: { readOnlyHint: true },
+      search: { type: "string", description: "Text in title or description" },
+      pending_review_for: { type: "string", description: "Name of a person who still has to review" } } } },
+  { name: "get_task", description: "Task details: description, definition of done, reviewers, attachments and activity.", annotations: { readOnlyHint: true },
     inputSchema: { type: "object", properties: { task: T }, required: ["task"] } },
-  { name: "create_task", description: "Cria uma tarefa. A definição de pronto (lista de critérios) é obrigatória para a tarefa chegar a Revisão e Feito.",
+  { name: "create_task", description: "Create a task. The definition of done (list of criteria) is only required later, to move the task to Review or Done.",
     inputSchema: { type: "object", required: ["person", "title"], properties: {
       person: P, title: { type: "string" }, description: { type: "string" },
-      definition_of_done: { type: "array", items: { type: "string" }, description: "Critérios de pronto, um por item" },
+      definition_of_done: { type: "array", items: { type: "string" }, description: "Done criteria, one per item" },
       priority: { type: "string", enum: ["high", "medium", "low"] },
       status: { type: "string", enum: ["backlog", "todo", "doing"] },
-      owner: { type: "string", description: "Responsável (padrão: person)" } } } },
-  { name: "update_task", description: "Altera título, descrição, prioridade ou responsável.",
+      owner: { type: "string", description: "Owner (default: person)" } } } },
+  { name: "update_task", description: "Change title, description, priority or owner.",
     inputSchema: { type: "object", required: ["person", "task"], properties: {
       person: P, task: T, title: { type: "string" }, description: { type: "string" },
       priority: { type: "string", enum: ["high", "medium", "low"] }, owner: { type: "string" } } } },
-  { name: "move_task", description: "Move a tarefa (só o responsável) para backlog, todo, doing ou done. Ir para done sem revisão exige definição de pronto completa; para pedir validação use send_to_review.",
+  { name: "move_task", description: "Move a task (owner only) to backlog, todo, doing or done. Done without review requires a complete definition of done; to ask for validation use send_to_review.",
     inputSchema: { type: "object", required: ["person", "task", "to"], properties: {
       person: P, task: T, to: { type: "string", enum: ["backlog", "todo", "doing", "done"] } } } },
-  { name: "set_definition_of_done", description: "Substitui a lista de critérios de pronto da tarefa (todos desmarcados, a não ser que done=true).",
+  { name: "set_definition_of_done", description: "Replace the task's definition of done (all items unchecked).",
     inputSchema: { type: "object", required: ["person", "task", "items"], properties: {
       person: P, task: T, items: { type: "array", items: { type: "string" } } } } },
-  { name: "check_done_item", description: "Marca ou desmarca um critério da definição de pronto (pelo número, começando em 1, ou pelo texto).",
+  { name: "check_done_item", description: "Check or uncheck a definition-of-done item (by number starting at 1, or by text).",
     inputSchema: { type: "object", required: ["person", "task", "item"], properties: {
-      person: P, task: T, item: { type: "string", description: "Número ou texto do critério" }, done: { type: "boolean", default: true } } } },
-  { name: "send_to_review", description: "Envia para Revisão. Exige definição de pronto completa e ao menos um revisor diferente do responsável.",
+      person: P, task: T, item: { type: "string", description: "Number or text of the item" }, done: { type: "boolean", default: true } } } },
+  { name: "send_to_review", description: "Send to Review. Requires a complete definition of done and at least one reviewer other than the owner.",
     inputSchema: { type: "object", required: ["person", "task", "reviewers"], properties: {
       person: P, task: T, reviewers: { type: "array", items: { type: "string" } }, note: { type: "string" } } } },
-  { name: "review_task", description: "Revisor aprova ou pede ajustes. Quando todos aprovam, a tarefa vai para Feito. Pedir ajustes exige nota e devolve para Fazendo.",
+  { name: "review_task", description: "A reviewer approves or requests changes. When all approve, the task goes to Done. Requesting changes needs a note and sends the task back to Doing.",
     inputSchema: { type: "object", required: ["person", "task", "decision"], properties: {
       person: P, task: T, decision: { type: "string", enum: ["approve", "request_changes"] }, note: { type: "string" } } } },
-  { name: "add_comment", description: "Adiciona um comentário à tarefa.",
+  { name: "add_comment", description: "Add a comment to a task.",
     inputSchema: { type: "object", required: ["person", "task", "text"], properties: { person: P, task: T, text: { type: "string" } } } },
-  { name: "timer", description: "Inicia ou pausa o cronômetro da tarefa (só o responsável). Iniciar move para Fazendo.",
+  { name: "timer", description: "Start or pause the task timer (owner only). Starting moves the task to Doing.",
     inputSchema: { type: "object", required: ["person", "task", "action"], properties: {
       person: P, task: T, action: { type: "string", enum: ["start", "stop"] } } } },
-  { name: "add_link", description: "Anexa um link (Drive, Figma, documento) à tarefa.",
+  { name: "add_link", description: "Attach a link (Drive, Figma, document) to a task.",
     inputSchema: { type: "object", required: ["person", "task", "url"], properties: {
       person: P, task: T, url: { type: "string" }, name: { type: "string" } } } },
 ];
@@ -162,22 +163,22 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       const fls = check(await sb.from("jira_files").select("*").eq("task_id", t.id).order("created_at")) as Task[];
       return { ...summary(t, ms), description: t.description, created_by: nm(t.created_by), created_at: t.created_at,
         attachments: fls.map((f) => ({ name: f.name, type: f.kind, url: f.kind === "link" ? f.url : undefined })),
-        activity: cms.map((c) => ({ by: nm(c.author_id), kind: c.kind, text: c.body, at: c.created_at })), app: APP_URL };
+        activity: cms.map((c) => ({ by: nm(c.author_id), kind: c.kind, text: c.body, at: c.created_at })) };
     }
 
     case "create_task": {
       const who = await person(a.person, ms);
       const owner = a.owner ? await person(a.owner, ms) : who;
       const status = a.status ? lane(a.status) : "todo";
-      if (!["backlog", "todo", "doing"].includes(status)) throw new UserError("Tarefas novas começam em backlog, todo ou doing.");
+      if (!["backlog", "todo", "doing"].includes(status)) throw new UserError("New tasks start in backlog, todo or doing.");
       const title = String(a.title ?? "").trim();
-      if (!title) throw new UserError("Informe o título.");
+      if (!title) throw new UserError("A title is required.");
       const t = check(await sb.from("jira_tasks").insert({
         title, description: String(a.description ?? ""), status, priority: a.priority ? priority(a.priority) : "medium",
         owner_id: owner.id, created_by: who.id,
         dod: (a.definition_of_done ?? []).map((s: string) => String(s).trim()).filter(Boolean).map((text: string) => ({ id: crypto.randomUUID(), text, done: false })),
       }).select().single()) as Task;
-      return { created: summary(t, ms), note: (t.dod.length ? undefined : "Sem definição de pronto: adicione com set_definition_of_done antes da revisão."), app: APP_URL };
+      return { created: summary(t, ms), note: (t.dod.length ? undefined : "No definition of done yet: add one with set_definition_of_done before Review or Done.") };
     }
 
     case "update_task": {
@@ -188,10 +189,10 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       if (a.description !== undefined) patch.description = String(a.description);
       if (a.priority !== undefined) patch.priority = priority(a.priority);
       if (a.owner !== undefined) {
-        if (["review", "done"].includes(t.status)) throw new UserError("Não dá para trocar o responsável durante a revisão ou depois de concluída.");
+        if (["review", "done"].includes(t.status)) throw new UserError("The owner can't change while in review or after the task is done.");
         patch.owner_id = (await person(a.owner, ms)).id;
       }
-      if (!Object.keys(patch).length) throw new UserError("Nada para alterar.");
+      if (!Object.keys(patch).length) throw new UserError("Nothing to change.");
       const u = check(await sb.from("jira_tasks").update(patch).eq("id", t.id).select().single()) as Task;
       return { updated: summary(u, ms) };
     }
@@ -200,10 +201,10 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       const who = await person(a.person, ms);
       const t = await task(a.task);
       const to = lane(a.to);
-      if (to === "review") throw new UserError("Para Revisão use send_to_review, escolhendo os revisores.");
+      if (to === "review") throw new UserError("To move to Review use send_to_review and choose reviewers.");
       mustOwn(t, who);
-      if (to === "done" && t.status === "review") throw new UserError(`${code(t)} está em revisão: vai para Feito quando todos aprovarem. Para concluir sem revisão, mova antes para doing.`);
-      if (to === "done" && !dodOk(t)) throw new UserError("Complete a definição de pronto (todos os critérios marcados) antes de concluir.");
+      if (to === "done" && t.status === "review") throw new UserError(`${code(t)} is in review: it goes to Done when everyone approves. To finish without review, move it to doing first.`);
+      if (to === "done" && !dodOk(t)) throw new UserError("Complete the definition of done (all items checked) before finishing.");
       if (t.timer_started_at && to !== "doing") check(await sb.rpc("jira_timer", { p_task: t.id, p_start: false }));
       const patch: Record<string, unknown> = { status: to };
       if (t.status === "review") patch.approvals = {};
@@ -216,7 +217,7 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
     case "set_definition_of_done": {
       await person(a.person, ms);
       const t = await task(a.task);
-      if (["review", "done"].includes(t.status)) throw new UserError("A definição de pronto fica travada em Revisão e Feito.");
+      if (["review", "done"].includes(t.status)) throw new UserError("The definition of done is locked in Review and Done.");
       const items = (a.items ?? []).map((s: string) => String(s).trim()).filter(Boolean).map((text: string) => ({ id: crypto.randomUUID(), text, done: false }));
       const u = check(await sb.from("jira_tasks").update({ dod: items }).eq("id", t.id).select().single()) as Task;
       return { updated: summary(u, ms) };
@@ -225,12 +226,12 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
     case "check_done_item": {
       await person(a.person, ms);
       const t = await task(a.task);
-      if (["review", "done"].includes(t.status)) throw new UserError("A definição de pronto fica travada em Revisão e Feito.");
+      if (["review", "done"].includes(t.status)) throw new UserError("The definition of done is locked in Review and Done.");
       const d = [...(t.dod || [])];
       const ref = String(a.item ?? "").trim();
       let ix = /^\d+$/.test(ref) ? Number(ref) - 1 : d.findIndex((i: any) => norm(i.text) === norm(ref));
       if (ix < 0 && ref) ix = d.findIndex((i: any) => norm(i.text).includes(norm(ref)));
-      if (ix < 0 || ix >= d.length) throw new UserError(`Critério "${ref}" não encontrado em ${code(t)}.`);
+      if (ix < 0 || ix >= d.length) throw new UserError(`Item "${ref}" not found in ${code(t)}.`);
       d[ix] = { ...d[ix], done: a.done !== false };
       const u = check(await sb.from("jira_tasks").update({ dod: d }).eq("id", t.id).select().single()) as Task;
       return { updated: summary(u, ms) };
@@ -240,11 +241,11 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       const who = await person(a.person, ms);
       const t = await task(a.task);
       mustOwn(t, who);
-      if (!["backlog", "todo", "doing"].includes(t.status)) throw new UserError(`${code(t)} já está em ${LANES[t.status]}.`);
-      if (!dodOk(t)) throw new UserError("Complete a definição de pronto (todos os critérios marcados) antes da revisão.");
+      if (!["backlog", "todo", "doing"].includes(t.status)) throw new UserError(`${code(t)} is already in ${LANES[t.status]}.`);
+      if (!dodOk(t)) throw new UserError("Complete the definition of done (all items checked) before review.");
       const revs: string[] = [];
-      for (const r of a.reviewers ?? []) { const m = await person(r, ms); if (m.id === (t.owner_id ?? who.id)) throw new UserError("O responsável não pode revisar a própria tarefa."); if (!revs.includes(m.id)) revs.push(m.id); }
-      if (!revs.length) throw new UserError("Escolha ao menos um revisor.");
+      for (const r of a.reviewers ?? []) { const m = await person(r, ms); if (m.id === (t.owner_id ?? who.id)) throw new UserError("The owner can't review their own task."); if (!revs.includes(m.id)) revs.push(m.id); }
+      if (!revs.length) throw new UserError("Choose at least one reviewer.");
       if (t.timer_started_at) check(await sb.rpc("jira_timer", { p_task: t.id, p_start: false }));
       const u = check(await sb.from("jira_tasks").update({ status: "review", reviewers: revs, approvals: {}, owner_id: t.owner_id ?? who.id }).eq("id", t.id).select().single()) as Task;
       check(await sb.from("jira_comments").insert({ task_id: t.id, author_id: who.id, kind: "review", body: String(a.note ?? ""), meta: { to: revs } }));
@@ -254,28 +255,28 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
     case "review_task": {
       const who = await person(a.person, ms);
       const t = await task(a.task);
-      if (t.status !== "review") throw new UserError(`${code(t)} não está em revisão.`);
-      if (!t.reviewers.includes(who.id)) throw new UserError(`${who.name} não é revisor(a) de ${code(t)}.`);
+      if (t.status !== "review") throw new UserError(`${code(t)} is not in review.`);
+      if (!t.reviewers.includes(who.id)) throw new UserError(`${who.name} is not a reviewer of ${code(t)}.`);
       if (a.decision === "approve") {
         const r = check(await sb.rpc("jira_approve", { p_task: t.id, p_member: who.id, p_note: String(a.note ?? "") })) as Task;
         const row = Array.isArray(r) ? r[0] : r;
-        return { result: row.status === "done" ? "Aprovada por todos: movida para Feito." : "Aprovação registrada; aguardando os demais revisores.", task: summary(row, ms) };
+        return { result: row.status === "done" ? "Approved by everyone: moved to Done." : "Approval recorded; waiting for the other reviewers.", task: summary(row, ms) };
       }
       if (a.decision === "request_changes") {
         const note = String(a.note ?? "").trim();
-        if (!note) throw new UserError("Explique em note o que precisa ser ajustado.");
+        if (!note) throw new UserError("Explain in note what needs to change.");
         const u = check(await sb.from("jira_tasks").update({ status: "doing", approvals: {} }).eq("id", t.id).select().single()) as Task;
         check(await sb.from("jira_comments").insert({ task_id: t.id, author_id: who.id, kind: "changes", body: note }));
-        return { result: "Ajustes pedidos: tarefa voltou para Fazendo.", task: summary(u, ms) };
+        return { result: "Changes requested: the task went back to Doing.", task: summary(u, ms) };
       }
-      throw new UserError("decision deve ser approve ou request_changes.");
+      throw new UserError("decision must be approve or request_changes.");
     }
 
     case "add_comment": {
       const who = await person(a.person, ms);
       const t = await task(a.task);
       const text = String(a.text ?? "").trim();
-      if (!text) throw new UserError("Comentário vazio.");
+      if (!text) throw new UserError("Empty comment.");
       check(await sb.from("jira_comments").insert({ task_id: t.id, author_id: who.id, kind: "comment", body: text }));
       return { ok: true, task: code(t) };
     }
@@ -285,7 +286,7 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       const t = await task(a.task);
       mustOwn(t, who);
       const start = a.action === "start";
-      if (start && !["backlog", "todo", "doing"].includes(t.status)) throw new UserError(`Não dá para cronometrar uma tarefa em ${LANES[t.status]}.`);
+      if (start && !["backlog", "todo", "doing"].includes(t.status)) throw new UserError(`Can't time a task in ${LANES[t.status]}.`);
       const r = check(await sb.rpc("jira_timer", { p_task: t.id, p_start: start })) as Task;
       return { task: summary(Array.isArray(r) ? r[0] : r, ms) };
     }
@@ -295,12 +296,12 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       const t = await task(a.task);
       let url = String(a.url ?? "").trim();
       if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-      try { new URL(url); } catch { throw new UserError("Link inválido."); }
+      try { new URL(url); } catch { throw new UserError("Invalid link."); }
       check(await sb.from("jira_files").insert({ task_id: t.id, kind: "link", name: String(a.name || new URL(url).hostname), url, uploaded_by: who.id }));
       return { ok: true, task: code(t) };
     }
   }
-  throw new UserError(`Ferramenta desconhecida: ${name}`);
+  throw new UserError(`Unknown tool: ${name}`);
 }
 
 /* ---------------- JSON-RPC / MCP ---------------- */
@@ -311,7 +312,7 @@ const CORS = {
   "Access-Control-Expose-Headers": "mcp-session-id",
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-const INSTRUCTIONS = `Quadro de tarefas da equipe Meridiano (raias: Backlog, A fazer, Fazendo, Revisão, Feito). Toda ação de escrita exige "person": o nome de quem está agindo — pergunte ao usuário quem ele é se não souber (use list_members). Regras: só o responsável move a tarefa; Revisão e Feito exigem a definição de pronto completa; a revisão é opcional (send_to_review escolhe revisores), e uma tarefa em Revisão só vai para Feito quando todos aprovam. Tarefas são referenciadas como MER-<número>. App: ${APP_URL}`;
+const INSTRUCTIONS = `Meridiano team task board (lanes: Backlog, To do, Doing, Review, Done). The team works in English, Spanish and Portuguese: answer in the user's language. Every write needs "person": the name of who is acting — ask the user who they are if unknown (use list_members). Rules: only the task owner moves it; Review and Done require a complete definition of done; review is optional (send_to_review picks reviewers), and a task in Review only reaches Done when every reviewer approves. Tasks are referenced as MER-<number>. App: ${APP_URL}`;
 
 async function handle(msg: any) {
   const { id, method, params } = msg ?? {};
@@ -322,7 +323,7 @@ async function handle(msg: any) {
         return { jsonrpc: "2.0", id, result: {
           protocolVersion: params?.protocolVersion ?? "2025-06-18",
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "meridiano-quadro", title: "Meridiano · Quadro", version: "1.0.0" },
+          serverInfo: { name: "meridiano-board", title: "Meridiano · Board", version: "1.1.0" },
           instructions: INSTRUCTIONS } };
       case "ping": return { jsonrpc: "2.0", id, result: {} };
       case "tools/list": return { jsonrpc: "2.0", id, result: { tools } };
@@ -337,7 +338,7 @@ async function handle(msg: any) {
           return { jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: m }] } };
         }
       }
-      default: return { jsonrpc: "2.0", id, error: { code: -32601, message: `Método não suportado: ${method}` } };
+      default: return { jsonrpc: "2.0", id, error: { code: -32601, message: `Method not supported: ${method}` } };
     }
   } catch (e) {
     return { jsonrpc: "2.0", id, error: { code: -32603, message: e instanceof Error ? e.message : String(e) } };
@@ -347,7 +348,7 @@ async function handle(msg: any) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/event-stream")) return new Response(null, { status: 405, headers: { ...CORS, Allow: "POST" } });
-  if (req.method === "GET") return json({ name: "Meridiano · Quadro (MCP)", transport: "streamable-http", endpoint: "POST este mesmo URL", app: APP_URL }, 200);
+  if (req.method === "GET") return json({ name: "Meridiano · Board (MCP)", transport: "streamable-http", endpoint: "POST to this URL", app: APP_URL }, 200);
   if (req.method === "DELETE") return new Response(null, { status: 204, headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   let body: any;

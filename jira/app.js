@@ -1,11 +1,8 @@
-/* Meridiano · Quadro — kanban leve da equipe.
-   Dados no Supabase (tabelas jira_*, bucket privado jira-files). ?demo abre com dados em memória. */
+/* Meridiano · Board — lightweight team kanban (EN · ES · PT).
+   Data in Supabase (jira_* tables, private jira-files bucket). ?demo runs with in-memory data. */
 'use strict';
 const CFG = { url: 'https://oqokqkrczmdnhfwiwwdv.supabase.co', key: 'sb_publishable_JNIa1DnBITfMvGDDAkYBaA_7A22onL6' };
 const DEMO = new URLSearchParams(location.search).has('demo');
-const LANES = [['backlog', 'Backlog'], ['todo', 'A fazer'], ['doing', 'Fazendo'], ['review', 'Revisão'], ['done', 'Feito']];
-const LN = Object.fromEntries(LANES);
-const PRI = { high: 'Alta', medium: 'Média', low: 'Baixa' };
 const PRANK = { high: 0, medium: 1, low: 2 };
 const COLORS = ['#C9A94E', '#8DB4D6', '#7FC8A2', '#C7A2E0', '#F0A38A', '#9FC3B8'];
 const IC = {
@@ -27,7 +24,7 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'x' + Math.random(
 const ts = v => (v ? Date.parse(v) : 0);
 const store = { get(k) { try { return localStorage.getItem(k) } catch (_) { return null } }, set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch (_) {} } };
 const member = id => S.members.find(m => m.id === id);
-const nm = id => (member(id) || {}).name || 'Sem responsável';
+const nm = id => (member(id) || {}).name || T().noOwner;
 const first = id => {
   const n = nm(id), p = n.split(' '), f = p[0];
   if (p.length > 1 && S.members.some(m => m.id !== id && m.name.split(' ')[0] === f)) return `${f} ${p[p.length - 1][0]}.`;
@@ -39,7 +36,197 @@ const av = (id, cls = '') => id && member(id)
   ? `<span class="av ${cls}" style="--c:${colorOf(id)}" title="${esc(nm(id))}">${esc(initials(nm(id)))}</span>`
   : `<span class="av none ${cls}">?</span>`;
 const code = t => 'MER-' + (t.number ?? '·');
-function ago(v) { const t = ts(v); if (!t) return ''; const s = (Date.now() - t) / 1000; if (s < 60) return 'agora'; if (s < 3600) return Math.floor(s / 60) + ' min'; if (s < 86400) return Math.floor(s / 3600) + ' h'; if (s < 604800) return Math.floor(s / 86400) + ' d'; return new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }); }
+/* ---------------- i18n (EN · ES · PT) ---------------- */
+const I18N = {
+  en: {
+    locale: 'en-US', lanes: { backlog: 'Backlog', todo: 'To do', doing: 'Doing', review: 'Review', done: 'Done' },
+    pri: { high: 'High', medium: 'Medium', low: 'Low' }, noOwner: 'Unassigned', you: 'you', now: 'now',
+    genericErr: 'Something went wrong. Please try again.', offline: 'No connection to the server. The board will retry on its own.',
+    loginEb: 'Team', loginH: 'Who’s working<br>today?', loginLead: 'Pick your name to sign in. The board remembers you on this device.',
+    enter: 'Sign in', notListed: 'I’m not on the list', addMyName: 'Add my name', yourName: 'Your full name', loadingTeam: 'Loading the team…',
+    hello: n => `Hi, ${n}.`, title: 'Team tasks', newTask: '+ New task', search: 'Search', searchAria: 'Search tasks',
+    statDoing: 'in progress', statReview: 'in review', statDone: 'done in 7 days',
+    fAll: 'All', fMine: 'Mine', fRev: 'For me to review', fHigh: 'High priority',
+    newIn: l => `New task in ${l}`, emptyFirst: 'No tasks yet.<br>Start with <b>+ New task</b>.', emptyRev: 'Nothing waiting for your review.',
+    empty: { backlog: 'Ideas and requests', todo: 'Nothing planned', doing: 'No one working', review: 'Nothing in review', done: 'Nothing finished' },
+    dodShort: 'Definition of done', signedAs: 'Signed in as', switchPerson: 'Switch person', toggleTheme: 'Toggle light/dark theme', lang: 'Language',
+    onlyOwnerMoves: n => `Only ${n}, the task owner, can move it.`,
+    reviewToDone: 'In review, the task goes to Done when everyone approves. To finish without review, take it out of review first.',
+    dodMissing: to => `Write the definition of done before ${to === 'done' ? 'finishing' : 'sending to review'}.`,
+    dodOpen: to => `Check every item of the definition of done before ${to === 'done' ? 'finishing' : 'sending to review'}.`,
+    finished: c => `${c} done`, outOfReview: 'Task taken out of review',
+    nNewEb: 'New task', nNewH: 'What needs to be done?', fTitle: 'Title', fTitlePh: 'E.g. Review the client proposal', fDesc: 'Description', fDescPh: 'Context, links, details',
+    fDod: 'Definition of done', fDodPh: 'One criterion per line. E.g.:&#10;Client approved the scope&#10;Final file attached', fDodHint: 'Only required when moving to Review or Done. You can write it later.',
+    fLane: 'Lane', fOwner: 'Owner', fPri: 'Priority', fFiles: 'Attachments', cancel: 'Cancel', create: 'Create task', needTitle: 'Give the task a title.',
+    uploadFail: (n, e) => `Couldn’t upload ${n}: ${e}`, created: c => `${c} created`,
+    revEb: c => `Review · ${c}`, revH: 'Who validates?', revLead: 'The task goes to Done only when everyone selected approves.', revNote: 'Note (optional)', revNotePh: 'What should they look at?',
+    sendReview: 'Send to review', pickOne: 'Choose at least one person.', sentReview: ns => `Sent for review to ${ns}`, and: ' and ',
+    owner: 'Owner', priority: 'Priority', createdL: 'Created', by: (n, a) => `by ${n} · ${a}`,
+    dodAddPh: 'Add a done criterion', add: 'Add', timeSpent: 'Time spent', descL: 'Description', save: 'Save', discard: 'Discard',
+    attachments: 'Attachments', addFile: '+ File', addLink: '+ Link', linkPh: 'https://… (Drive, Figma, Notion)', activity: 'Activity', commentPh: 'Write a comment', send: 'Send', close: 'Close',
+    unsaved: 'You have unsaved changes. Save or discard them.',
+    hintNotOwner: n => `Only ${n}, the owner, moves this task.`, hintReview: 'In review. Goes to Done when all reviewers approve.',
+    hintDone: 'Done. You can reopen it by moving it to another lane.', hintOpen: 'With the definition of done complete: send to Review or, if no validation is needed, move straight to Done.',
+    dodOf: (a, b) => `${a} of ${b}`, removeCrit: 'Remove criterion', dodEmpty: 'No definition of done yet. Write the criteria that say when this task is finished.',
+    dodLockedReview: 'Locked during review. Take it out of review to change it.', dodLockedDone: 'Criteria met.',
+    pause: 'Pause', resume: 'Resume', start: 'Start', countingSince: tm => `Running since ${tm}. Pauses on its own when the task leaves Doing.`, timerHint: 'Starting the timer moves the task to Doing.',
+    validated: 'Validated', awaiting: 'Waiting for validation', approved: a => `✓ Approved · ${a}`, pending: 'Pending',
+    rNotePh: 'Comment (required to request changes)', approve: 'Approve', requestChanges: 'Request changes', takeOut: 'Take out of review',
+    kinds: { review: 'requested review', approve: 'approved', changes: 'requested changes' }, noComments: 'No comments yet.',
+    updated: a => `Updated ${a}`, del: 'Delete', delConfirm: c => `Delete ${c} for good?`, deleted: c => `${c} deleted`,
+    link: 'Link', removeAtt: 'Remove attachment', noAtt: 'No attachments.', attRemoved: 'Attachment removed',
+    titleEmpty: 'The title can’t be empty.', saved: 'Saved', timerStarted: 'Timer started', timerPaused: 'Timer paused',
+    tooBig: n => `${n} is larger than 50 MB.`, uploading: n => `Uploading ${n}…`, badLink: 'Invalid link.', linkAdded: 'Link added',
+    allApproved: 'Approved by everyone. Moved to Done.', approvalSaved: 'Approval recorded.', writeChanges: 'Write what needs to change.', changesAsked: 'Changes requested. The task went back to Doing.',
+    shareNew: (c, p, ti, by, ow, l) => `🆕 *New task ${c}*${p ? ' · ' + p + ' priority' : ''}\n${ti}\nCreated by ${by} · owner: ${ow}\n${l}`,
+    shareReview: (c, ti, rv, by, l) => `🔍 *${c} is waiting for review*\n${ti}\nReviewers: ${rv} · sent by ${by}\n${l}`,
+    shareChanges: (c, ti, by, note, l) => `↩️ *Changes requested on ${c}*\n${ti}\n${by}: ${note}\n${l}`,
+    shareDone: (c, ti, ow, rv, l) => `✅ *${c} done*\n${ti}\nOwner: ${ow}${rv ? ' · approved by ' + rv : ' · no review'}\n${l}`,
+    shareQ: { new: 'Tell the team about the new task?', review: 'Let the reviewers know in the group?', changes: 'Let the owner know in the group?', done: 'Tell the group it’s done?' },
+    shareBtn: 'Notify the group', copy: 'Copy', copied: 'Message copied.', copyFail: 'Couldn’t copy.',
+    news: 'What’s new', nothingNew: 'Nothing new here.',
+    evCreated: (c, forYou) => `created ${c}${forYou ? ' for you' : ''}`, evReview: c => `asked for your review on ${c}`, evChanges: c => `requested changes on ${c}`,
+    evApprove: c => `approved ${c}`, evComment: c => `commented on ${c}`,
+    err: { dod: 'Complete the definition of done first.', reviewAll: 'In review, the task only goes to Done when all reviewers approve.', notInReview: 'The task is not in review.', notReviewer: 'You are not a reviewer of this task.', exists: 'That name already exists.' },
+  },
+  es: {
+    locale: 'es', lanes: { backlog: 'Backlog', todo: 'Por hacer', doing: 'En curso', review: 'Revisión', done: 'Hecho' },
+    pri: { high: 'Alta', medium: 'Media', low: 'Baja' }, noOwner: 'Sin responsable', you: 'tú', now: 'ahora',
+    genericErr: 'Algo salió mal. Inténtalo de nuevo.', offline: 'Sin conexión con el servidor. El tablero lo intentará de nuevo solo.',
+    loginEb: 'Equipo', loginH: '¿Quién trabaja<br>hoy?', loginLead: 'Elige tu nombre para entrar. El tablero te recuerda en este dispositivo.',
+    enter: 'Entrar', notListed: 'No estoy en la lista', addMyName: 'Agregar mi nombre', yourName: 'Tu nombre completo', loadingTeam: 'Cargando el equipo…',
+    hello: n => `Hola, ${n}.`, title: 'Tareas del equipo', newTask: '+ Nueva tarea', search: 'Buscar', searchAria: 'Buscar tareas',
+    statDoing: 'en curso', statReview: 'en revisión', statDone: 'hechas en 7 días',
+    fAll: 'Todas', fMine: 'Mías', fRev: 'Para revisar', fHigh: 'Prioridad alta',
+    newIn: l => `Nueva tarea en ${l}`, emptyFirst: 'Aún no hay tareas.<br>Empieza con <b>+ Nueva tarea</b>.', emptyRev: 'Nada esperando tu revisión.',
+    empty: { backlog: 'Ideas y pedidos', todo: 'Nada planificado', doing: 'Nadie trabajando', review: 'Nada en revisión', done: 'Nada terminado' },
+    dodShort: 'Definición de terminado', signedAs: 'Conectado como', switchPerson: 'Cambiar de persona', toggleTheme: 'Cambiar tema claro/oscuro', lang: 'Idioma',
+    onlyOwnerMoves: n => `Solo ${n}, responsable de la tarea, puede moverla.`,
+    reviewToDone: 'En revisión, la tarea pasa a Hecho cuando todos aprueban. Para terminar sin revisión, sácala de revisión primero.',
+    dodMissing: to => `Escribe la definición de terminado antes de ${to === 'done' ? 'terminar' : 'enviar a revisión'}.`,
+    dodOpen: to => `Marca todos los ítems de la definición de terminado antes de ${to === 'done' ? 'terminar' : 'enviar a revisión'}.`,
+    finished: c => `${c} terminada`, outOfReview: 'Tarea retirada de revisión',
+    nNewEb: 'Nueva tarea', nNewH: '¿Qué hay que hacer?', fTitle: 'Título', fTitlePh: 'Ej.: Revisar la propuesta del cliente', fDesc: 'Descripción', fDescPh: 'Contexto, enlaces, detalles',
+    fDod: 'Definición de terminado', fDodPh: 'Un criterio por línea. Ej.:&#10;El cliente aprobó el alcance&#10;Archivo final adjunto', fDodHint: 'Solo se exige al mover a Revisión o Hecho. Puedes escribirla después.',
+    fLane: 'Columna', fOwner: 'Responsable', fPri: 'Prioridad', fFiles: 'Adjuntos', cancel: 'Cancelar', create: 'Crear tarea', needTitle: 'Ponle un título a la tarea.',
+    uploadFail: (n, e) => `No pude subir ${n}: ${e}`, created: c => `${c} creada`,
+    revEb: c => `Revisión · ${c}`, revH: '¿Quién valida?', revLead: 'La tarea pasa a Hecho solo cuando todos los elegidos aprueban.', revNote: 'Nota (opcional)', revNotePh: '¿Qué deben mirar con atención?',
+    sendReview: 'Enviar a revisión', pickOne: 'Elige al menos una persona.', sentReview: ns => `Enviada a revisión de ${ns}`, and: ' y ',
+    owner: 'Responsable', priority: 'Prioridad', createdL: 'Creada', by: (n, a) => `por ${n} · ${a}`,
+    dodAddPh: 'Agregar criterio de terminado', add: 'Agregar', timeSpent: 'Tiempo dedicado', descL: 'Descripción', save: 'Guardar', discard: 'Descartar',
+    attachments: 'Adjuntos', addFile: '+ Archivo', addLink: '+ Enlace', linkPh: 'https://… (Drive, Figma, Notion)', activity: 'Actividad', commentPh: 'Escribe un comentario', send: 'Enviar', close: 'Cerrar',
+    unsaved: 'Tienes cambios sin guardar. Guarda o descarta.',
+    hintNotOwner: n => `Solo ${n}, responsable, mueve esta tarea.`, hintReview: 'En revisión. Pasa a Hecho cuando todos los revisores aprueban.',
+    hintDone: 'Terminada. Puedes reabrirla moviéndola a otra columna.', hintOpen: 'Con la definición de terminado completa: envía a Revisión o, si no necesita validación, mueve directo a Hecho.',
+    dodOf: (a, b) => `${a} de ${b}`, removeCrit: 'Quitar criterio', dodEmpty: 'Sin definición de terminado. Escribe los criterios que indican cuándo la tarea está terminada.',
+    dodLockedReview: 'Bloqueada durante la revisión. Sácala de revisión para cambiarla.', dodLockedDone: 'Criterios cumplidos.',
+    pause: 'Pausar', resume: 'Reanudar', start: 'Iniciar', countingSince: tm => `Contando desde las ${tm}. Se pausa solo al salir de En curso.`, timerHint: 'Iniciar el cronómetro mueve la tarea a En curso.',
+    validated: 'Validada', awaiting: 'Esperando validación', approved: a => `✓ Aprobó · ${a}`, pending: 'Pendiente',
+    rNotePh: 'Comentario (obligatorio para pedir cambios)', approve: 'Aprobar', requestChanges: 'Pedir cambios', takeOut: 'Sacar de revisión',
+    kinds: { review: 'pidió revisión', approve: 'aprobó', changes: 'pidió cambios' }, noComments: 'Sin comentarios.',
+    updated: a => `Actualizada ${a}`, del: 'Eliminar', delConfirm: c => `¿Eliminar ${c} definitivamente?`, deleted: c => `${c} eliminada`,
+    link: 'Enlace', removeAtt: 'Quitar adjunto', noAtt: 'Sin adjuntos.', attRemoved: 'Adjunto quitado',
+    titleEmpty: 'El título no puede quedar vacío.', saved: 'Guardado', timerStarted: 'Cronómetro iniciado', timerPaused: 'Cronómetro pausado',
+    tooBig: n => `${n} supera los 50 MB.`, uploading: n => `Subiendo ${n}…`, badLink: 'Enlace inválido.', linkAdded: 'Enlace agregado',
+    allApproved: 'Aprobada por todos. Pasó a Hecho.', approvalSaved: 'Aprobación registrada.', writeChanges: 'Escribe qué hay que cambiar.', changesAsked: 'Cambios pedidos. La tarea volvió a En curso.',
+    shareNew: (c, p, ti, by, ow, l) => `🆕 *Nueva tarea ${c}*${p ? ' · prioridad ' + p.toLowerCase() : ''}\n${ti}\nCreada por ${by} · responsable: ${ow}\n${l}`,
+    shareReview: (c, ti, rv, by, l) => `🔍 *${c} espera revisión*\n${ti}\nRevisores: ${rv} · enviada por ${by}\n${l}`,
+    shareChanges: (c, ti, by, note, l) => `↩️ *Cambios pedidos en ${c}*\n${ti}\n${by}: ${note}\n${l}`,
+    shareDone: (c, ti, ow, rv, l) => `✅ *${c} terminada*\n${ti}\nResponsable: ${ow}${rv ? ' · aprobada por ' + rv : ' · sin revisión'}\n${l}`,
+    shareQ: { new: '¿Avisar al equipo de la nueva tarea?', review: '¿Avisar a los revisores en el grupo?', changes: '¿Avisar al responsable en el grupo?', done: '¿Contar en el grupo que está terminada?' },
+    shareBtn: 'Avisar al grupo', copy: 'Copiar', copied: 'Mensaje copiado.', copyFail: 'No pude copiar.',
+    news: 'Novedades', nothingNew: 'Nada nuevo por aquí.',
+    evCreated: (c, forYou) => `creó ${c}${forYou ? ' para ti' : ''}`, evReview: c => `pidió tu revisión en ${c}`, evChanges: c => `pidió cambios en ${c}`,
+    evApprove: c => `aprobó ${c}`, evComment: c => `comentó en ${c}`,
+    err: { dod: 'Completa primero la definición de terminado.', reviewAll: 'En revisión, la tarea solo pasa a Hecho cuando todos los revisores aprueban.', notInReview: 'La tarea no está en revisión.', notReviewer: 'No eres revisor de esta tarea.', exists: 'Ese nombre ya existe.' },
+  },
+  pt: {
+    locale: 'pt-BR', lanes: { backlog: 'Backlog', todo: 'A fazer', doing: 'Fazendo', review: 'Revisão', done: 'Feito' },
+    pri: { high: 'Alta', medium: 'Média', low: 'Baixa' }, noOwner: 'Sem responsável', you: 'você', now: 'agora',
+    genericErr: 'Algo deu errado. Tente de novo.', offline: 'Sem conexão com o servidor. O quadro tenta de novo sozinho.',
+    loginEb: 'Equipe', loginH: 'Quem está<br>trabalhando hoje?', loginLead: 'Escolha seu nome para entrar. O quadro lembra de você neste aparelho.',
+    enter: 'Entrar', notListed: 'Não estou na lista', addMyName: 'Adicionar meu nome', yourName: 'Seu nome completo', loadingTeam: 'Carregando a equipe…',
+    hello: n => `Olá, ${n}.`, title: 'Tarefas da equipe', newTask: '+ Nova tarefa', search: 'Buscar', searchAria: 'Buscar tarefas',
+    statDoing: 'em andamento', statReview: 'em revisão', statDone: 'feitas em 7 dias',
+    fAll: 'Todas', fMine: 'Minhas', fRev: 'Para eu revisar', fHigh: 'Prioridade alta',
+    newIn: l => `Nova tarefa em ${l}`, emptyFirst: 'Nenhuma tarefa ainda.<br>Comece com <b>+ Nova tarefa</b>.', emptyRev: 'Nada esperando sua revisão.',
+    empty: { backlog: 'Ideias e pedidos', todo: 'Nada planejado', doing: 'Ninguém trabalhando', review: 'Nada em revisão', done: 'Nada concluído' },
+    dodShort: 'Definição de pronto', signedAs: 'Conectado como', switchPerson: 'Trocar de pessoa', toggleTheme: 'Alternar tema claro/escuro', lang: 'Idioma',
+    onlyOwnerMoves: n => `Só ${n}, responsável pela tarefa, pode movê-la.`,
+    reviewToDone: 'Em revisão, a tarefa vai para Feito quando todos aprovarem. Para concluir sem revisão, retire da revisão antes.',
+    dodMissing: to => `Escreva a definição de pronto antes de ${to === 'done' ? 'concluir' : 'enviar para revisão'}.`,
+    dodOpen: to => `Marque todos os itens da definição de pronto antes de ${to === 'done' ? 'concluir' : 'enviar para revisão'}.`,
+    finished: c => `${c} concluída`, outOfReview: 'Tarefa retirada da revisão',
+    nNewEb: 'Nova tarefa', nNewH: 'O que precisa ser feito?', fTitle: 'Título', fTitlePh: 'Ex.: Revisar proposta do cliente', fDesc: 'Descrição', fDescPh: 'Contexto, links, detalhes',
+    fDod: 'Definição de pronto', fDodPh: 'Um critério por linha. Ex.:&#10;Cliente aprovou o escopo&#10;Arquivo final anexado', fDodHint: 'Só é cobrada ao mover para Revisão ou Feito. Dá para escrever depois.',
+    fLane: 'Raia', fOwner: 'Responsável', fPri: 'Prioridade', fFiles: 'Anexos', cancel: 'Cancelar', create: 'Criar tarefa', needTitle: 'Dê um título à tarefa.',
+    uploadFail: (n, e) => `Não consegui enviar ${n}: ${e}`, created: c => `${c} criada`,
+    revEb: c => `Revisão · ${c}`, revH: 'Quem valida?', revLead: 'A tarefa só vai para Feito quando todos os escolhidos aprovarem.', revNote: 'Recado (opcional)', revNotePh: 'O que olhar com atenção?',
+    sendReview: 'Enviar para revisão', pickOne: 'Escolha pelo menos uma pessoa.', sentReview: ns => `Enviada para revisão de ${ns}`, and: ' e ',
+    owner: 'Responsável', priority: 'Prioridade', createdL: 'Criada', by: (n, a) => `por ${n} · ${a}`,
+    dodAddPh: 'Adicionar critério de pronto', add: 'Adicionar', timeSpent: 'Tempo dedicado', descL: 'Descrição', save: 'Salvar', discard: 'Descartar',
+    attachments: 'Anexos', addFile: '+ Arquivo', addLink: '+ Link', linkPh: 'https://… (Drive, Figma, Notion)', activity: 'Atividade', commentPh: 'Escreva um comentário', send: 'Enviar', close: 'Fechar',
+    unsaved: 'Há alterações não salvas. Salve ou descarte.',
+    hintNotOwner: n => `Só ${n}, responsável, move esta tarefa.`, hintReview: 'Em revisão. Vai para Feito quando todos os revisores aprovarem.',
+    hintDone: 'Concluída. Você pode reabrir movendo para outra raia.', hintOpen: 'Com a definição de pronto completa: envie para Revisão ou, se não precisar de validação, mova direto para Feito.',
+    dodOf: (a, b) => `${a} de ${b}`, removeCrit: 'Remover critério', dodEmpty: 'Sem definição de pronto. Escreva os critérios que dizem quando esta tarefa está concluída.',
+    dodLockedReview: 'Travada durante a revisão. Retire da revisão para alterar.', dodLockedDone: 'Critérios cumpridos.',
+    pause: 'Pausar', resume: 'Retomar', start: 'Iniciar', countingSince: tm => `Contando desde ${tm}. Pausa sozinho ao sair de Fazendo.`, timerHint: 'Iniciar o cronômetro move a tarefa para Fazendo.',
+    validated: 'Validada', awaiting: 'Aguardando validação', approved: a => `✓ Aprovou · ${a}`, pending: 'Pendente',
+    rNotePh: 'Comentário (obrigatório para pedir ajustes)', approve: 'Aprovar', requestChanges: 'Pedir ajustes', takeOut: 'Retirar da revisão',
+    kinds: { review: 'pediu revisão', approve: 'aprovou', changes: 'pediu ajustes' }, noComments: 'Sem comentários.',
+    updated: a => `Atualizada ${a}`, del: 'Excluir', delConfirm: c => `Excluir ${c} de vez?`, deleted: c => `${c} excluída`,
+    link: 'Link', removeAtt: 'Remover anexo', noAtt: 'Nenhum anexo.', attRemoved: 'Anexo removido',
+    titleEmpty: 'O título não pode ficar vazio.', saved: 'Salvo', timerStarted: 'Cronômetro iniciado', timerPaused: 'Cronômetro pausado',
+    tooBig: n => `${n} passa de 50 MB.`, uploading: n => `Enviando ${n}…`, badLink: 'Link inválido.', linkAdded: 'Link adicionado',
+    allApproved: 'Aprovada por todos. Movida para Feito.', approvalSaved: 'Aprovação registrada.', writeChanges: 'Escreva o que precisa ser ajustado.', changesAsked: 'Ajustes pedidos. A tarefa voltou para Fazendo.',
+    shareNew: (c, p, ti, by, ow, l) => `🆕 *Nova tarefa ${c}*${p ? ' · prioridade ' + p.toLowerCase() : ''}\n${ti}\nCriada por ${by} · responsável: ${ow}\n${l}`,
+    shareReview: (c, ti, rv, by, l) => `🔍 *${c} aguarda revisão*\n${ti}\nRevisores: ${rv} · enviada por ${by}\n${l}`,
+    shareChanges: (c, ti, by, note, l) => `↩️ *Ajustes pedidos em ${c}*\n${ti}\n${by}: ${note}\n${l}`,
+    shareDone: (c, ti, ow, rv, l) => `✅ *${c} concluída*\n${ti}\nResponsável: ${ow}${rv ? ' · aprovada por ' + rv : ' · sem revisão'}\n${l}`,
+    shareQ: { new: 'Avisar a equipe sobre a nova tarefa?', review: 'Avisar os revisores no grupo?', changes: 'Avisar o responsável no grupo?', done: 'Contar no grupo que foi concluída?' },
+    shareBtn: 'Avisar no grupo', copy: 'Copiar', copied: 'Mensagem copiada.', copyFail: 'Não consegui copiar.',
+    news: 'Novidades', nothingNew: 'Nada novo por aqui.',
+    evCreated: (c, forYou) => `criou ${c}${forYou ? ' para você' : ''}`, evReview: c => `pediu sua revisão em ${c}`, evChanges: c => `pediu ajustes em ${c}`,
+    evApprove: c => `aprovou ${c}`, evComment: c => `comentou em ${c}`,
+    err: { dod: 'Complete antes a definição de pronto.', reviewAll: 'Em revisão, a tarefa só vai para Feito quando todos os revisores aprovarem.', notInReview: 'A tarefa não está em revisão.', notReviewer: 'Você não é revisor desta tarefa.', exists: 'Esse nome já existe.' },
+  },
+};
+const LANG_KEYS = ['en', 'es', 'pt'];
+function detectLang() {
+  const saved = store.get('jira.lang'); if (LANG_KEYS.includes(saved)) return saved;
+  const nav = (navigator.languages || [navigator.language || 'en']).map(x => String(x).toLowerCase());
+  for (const l of nav) { if (l.startsWith('es')) return 'es'; if (l.startsWith('pt')) return 'pt'; if (l.startsWith('en')) return 'en'; }
+  return 'en';
+}
+let LANG = 'en';
+const T = () => I18N[LANG];
+const LN = new Proxy({}, { get: (_, k) => T().lanes[k] });
+const PRI = new Proxy({}, { get: (_, k) => T().pri[k] });
+const LANES = ['backlog', 'todo', 'doing', 'review', 'done'];
+function setLang(l) {
+  LANG = LANG_KEYS.includes(l) ? l : 'en'; store.set('jira.lang', LANG);
+  document.documentElement.lang = LANG === 'pt' ? 'pt-BR' : LANG;
+  $$('[data-i18n]').forEach(el => { el.innerHTML = T()[el.dataset.i18n]; });
+  $$('[data-i18n-ph]').forEach(el => { el.placeholder = T()[el.dataset.i18nPh]; });
+  $$('.langsw').forEach(sw => { sw.innerHTML = LANG_KEYS.map(k => `<button type="button" class="${k === LANG ? 'on' : ''}" data-lang="${k}">${k.toUpperCase()}</button>`).join(''); });
+  const tb = $('#toolbar'); if (tb) delete tb.dataset.built;
+  $('#menu').hidden = true;
+  if (S.loaded || $('#login').hidden === false) route();
+  if (S.openId && !dirty()) openDrawer(S.openId);
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-lang]'); if (b) { e.stopPropagation(); setLang(b.dataset.lang); } }, true);
+function localizeErr(m) {
+  const s = String(m || ''); const E = T().err;
+  if (/defini(ç|c)(ã|a)o de pronto|definition of done/i.test(s)) return E.dod;
+  if (/todos os revisores|all reviewers/i.test(s)) return E.reviewAll;
+  if (/n(ã|a)o est(á|a) em revis(ã|a)o|not in review/i.test(s)) return E.notInReview;
+  if (/n(ã|a)o (é|e) revisor|not a reviewer/i.test(s)) return E.notReviewer;
+  if (/duplicate key|j(á|a) existe/i.test(s)) return E.exists;
+  return s;
+}
+
+function ago(v) { const t = ts(v); if (!t) return ''; const s = (Date.now() - t) / 1000; if (s < 60) return T().now; if (s < 3600) return Math.floor(s / 60) + ' min'; if (s < 86400) return Math.floor(s / 3600) + ' h'; if (s < 604800) return Math.floor(s / 86400) + ' d'; return new Date(t).toLocaleDateString(T().locale, { day: '2-digit', month: 'short' }); }
 function size(b) { if (!b) return ''; if (b < 1024) return b + ' B'; if (b < 1048576) return Math.round(b / 1024) + ' KB'; return (b / 1048576).toFixed(1) + ' MB'; }
 const spent = t => (Number(t.time_spent_ms) || 0) + (t.timer_started_at ? Math.max(0, Date.now() - ts(t.timer_started_at)) : 0);
 function dur(ms, long) { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; if (long) return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; return h ? `${h}h ${String(m).padStart(2, '0')}m` : (m ? `${m}m` : '<1m'); }
@@ -50,7 +237,7 @@ const toReview = t => t.status === 'review' && (t.reviewers || []).includes(S.me
 const commentsOf = id => S.comments.filter(c => c.task_id === id);
 const filesOf = id => S.files.filter(f => f.task_id === id);
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 3200); }
-const errMsg = e => (e && (e.message || e.error_description)) || 'Algo deu errado. Tente de novo.';
+const errMsg = e => localizeErr((e && (e.message || e.error_description)) || '') || T().genericErr;
 async function act(fn, okMsg) {
   try { await fn(); await reload(); if (okMsg) toast(okMsg); return true; }
   catch (e) { console.error(e); toast(errMsg(e)); await reload().catch(() => {}); return false; }
@@ -116,7 +303,7 @@ function memApi() {
   };
   return {
     async loadAll() { return clone(db); },
-    async addMember(name) { if (db.members.some(m => m.name === name)) throw new Error('Esse nome já existe'); const m = { id: uuid(), name, created_at: now() }; db.members.push(m); return m; },
+    async addMember(name) { if (db.members.some(m => m.name === name)) throw new Error('duplicate key'); const m = { id: uuid(), name, created_at: now() }; db.members.push(m); return m; },
     async createTask(row) { const t = Object.assign({ id: uuid(), number: ++seq, description: '', status: 'todo', priority: 'medium', reviewers: [], approvals: {}, time_spent_ms: 0, timer_started_at: null, dod: [], created_at: now(), done_at: null }, clone(row), { updated_at: now() }); guard(null, t); db.tasks.push(t); return clone(t); },
     async updateTask(id, patch) { const t = db.tasks.find(x => x.id === id); const nw = Object.assign({}, t, clone(patch), { updated_at: now() }); guard(t, nw); Object.assign(t, nw); return clone(t); },
     async deleteTask(t) { db.tasks = db.tasks.filter(x => x.id !== t.id); db.comments = db.comments.filter(c => c.task_id !== t.id); db.files = db.files.filter(f => f.task_id !== t.id); },
@@ -161,7 +348,7 @@ async function reload() {
   route();
 }
 let rt; const soon = () => { clearTimeout(rt); rt = setTimeout(() => reload().catch(netFail), 250); };
-function netFail(e) { console.error(e); const b = $('#banner'); b.textContent = 'Sem conexão com o servidor. O quadro tenta de novo sozinho.'; b.hidden = false; }
+function netFail(e) { console.error(e); const b = $('#banner'); b.textContent = T().offline; b.hidden = false; }
 
 function route() {
   if (S.me && !member(S.me)) { S.me = null; store.set('jira.me', null); }
@@ -171,6 +358,7 @@ function route() {
 
 async function boot() {
   applyTheme(store.get('jira.theme') || 'dark');
+  setLang(detectLang());
   S.me = store.get('jira.me');
   try { await reload(); } catch (e) { route(); netFail(e); }
   api.subscribe(soon);
@@ -187,24 +375,24 @@ function applyTheme(t) { document.documentElement.dataset.theme = t; $('meta[nam
 const APP_URL = location.origin + location.pathname;
 const linkTo = t => `${APP_URL}#${code(t)}`;
 function shareText(kind, t, extra) {
-  const p = PRI[t.priority] ? ` · prioridade ${PRI[t.priority].toLowerCase()}` : '';
-  if (kind === 'new') return `🆕 *Nova tarefa ${code(t)}*${p}\n${t.title}\nCriada por ${nm(S.me)} · responsável: ${t.owner_id ? nm(t.owner_id) : 'sem responsável'}\n${linkTo(t)}`;
-  if (kind === 'review') return `🔍 *${code(t)} aguarda revisão*\n${t.title}\nRevisores: ${extra.map(nm).join(', ')} · enviada por ${nm(S.me)}\n${linkTo(t)}`;
-  if (kind === 'changes') return `↩️ *Ajustes pedidos em ${code(t)}*\n${t.title}\n${nm(S.me)}: ${extra}\n${linkTo(t)}`;
-  if (kind === 'done') return `✅ *${code(t)} concluída*\n${t.title}\nResponsável: ${nm(t.owner_id)}${(t.reviewers || []).length ? ' · aprovada por ' + t.reviewers.map(nm).join(', ') : ' · sem revisão'}\n${linkTo(t)}`;
+  const L = T();
+  if (kind === 'new') return L.shareNew(code(t), PRI[t.priority], t.title, nm(S.me), nm(t.owner_id), linkTo(t));
+  if (kind === 'review') return L.shareReview(code(t), t.title, extra.map(nm).join(', '), nm(S.me), linkTo(t));
+  if (kind === 'changes') return L.shareChanges(code(t), t.title, nm(S.me), extra, linkTo(t));
+  if (kind === 'done') return L.shareDone(code(t), t.title, nm(t.owner_id), (t.reviewers || []).map(nm).join(', '), linkTo(t));
   return '';
 }
 function offerShare(kind, t, extra) {
   const text = shareText(kind, t, extra); if (!text) return;
   const box = $('#share');
-  const title = { new: 'Avisar a equipe sobre a nova tarefa?', review: 'Avisar os revisores no grupo?', changes: 'Avisar o responsável no grupo?', done: 'Contar no grupo que foi concluída?' }[kind];
+  const title = T().shareQ[kind];
   box.innerHTML = `<div class="sh-t"><b>${esc(title)}</b><span>${esc(code(t))} · ${esc(t.title)}</span></div>
-    <a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">${IC.wa}Avisar no grupo</a>
-    <button class="btn ghost sm" id="shareCopy">Copiar</button><button class="icon-btn" id="shareX" aria-label="Fechar">${IC.close}</button>`;
+    <a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">${IC.wa}${T().shareBtn}</a>
+    <button class="btn ghost sm" id="shareCopy">${T().copy}</button><button class="icon-btn" id="shareX" aria-label="${T().close}">${IC.close}</button>`;
   box.hidden = false; requestAnimationFrame(() => box.classList.add('on'));
   const hide = () => { box.classList.remove('on'); setTimeout(() => { box.hidden = true; }, 200); };
   $('#shareX').onclick = hide; $('a.wa', box).onclick = () => setTimeout(hide, 300);
-  $('#shareCopy').onclick = async () => { try { await navigator.clipboard.writeText(text); toast('Mensagem copiada.'); } catch (_) { toast('Não consegui copiar.'); } };
+  $('#shareCopy').onclick = async () => { try { await navigator.clipboard.writeText(text); toast(T().copied); } catch (_) { toast(T().copyFail); } };
   clearTimeout(offerShare.t); offerShare.t = setTimeout(hide, 20000);
 }
 const seenKey = () => 'jira.seen.' + S.me;
@@ -213,14 +401,14 @@ function events() {
   const ev = [], me = S.me, week = Date.now() - 14 * 864e5;
   const tk = id => S.tasks.find(t => t.id === id);
   S.tasks.forEach(t => { if (t.created_by && t.created_by !== me && ts(t.created_at) > week)
-    ev.push({ at: ts(t.created_at), t, who: t.created_by, text: `criou ${code(t)}${t.owner_id === me ? ' para você' : ''}`, strong: t.owner_id === me }); });
+    ev.push({ at: ts(t.created_at), t, who: t.created_by, text: T().evCreated(code(t), t.owner_id === me), strong: t.owner_id === me }); });
   S.comments.forEach(c => {
     const t = tk(c.task_id); if (!t || c.author_id === me || ts(c.created_at) < week) return;
     const mine = t.owner_id === me;
-    if (c.kind === 'review' && c.meta && (c.meta.to || []).includes(me)) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `pediu sua revisão em ${code(t)}`, strong: true });
-    else if (c.kind === 'changes' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `pediu ajustes em ${code(t)}`, strong: true });
-    else if (c.kind === 'approve' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `aprovou ${code(t)}` });
-    else if (c.kind === 'comment' && (mine || (t.reviewers || []).includes(me))) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `comentou em ${code(t)}` });
+    if (c.kind === 'review' && c.meta && (c.meta.to || []).includes(me)) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evReview(code(t)), strong: true });
+    else if (c.kind === 'changes' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evChanges(code(t)), strong: true });
+    else if (c.kind === 'approve' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evApprove(code(t)) });
+    else if (c.kind === 'comment' && (mine || (t.reviewers || []).includes(me))) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evComment(code(t)) });
   });
   return ev.sort((a, b) => b.at - a.at).slice(0, 40);
 }
@@ -230,9 +418,9 @@ function renderBell() {
 }
 function openBell() {
   const ev = events(), seen = lastSeen(), m = $('#menu');
-  m.innerHTML = `<div style="padding:10px 12px 6px"><div class="eb" style="color:var(--mut2)">Novidades</div></div>` +
+  m.innerHTML = `<div style="padding:10px 12px 6px"><div class="eb" style="color:var(--mut2)">${T().news}</div></div>` +
     (ev.length ? ev.map((e, i) => `<button class="nt ${e.at > seen ? 'new' : ''}" data-ev="${i}">${av(e.who)}<span><b>${esc(first(e.who))}</b> ${esc(e.text)}<small>${esc(e.t.title)} · ${ago(new Date(e.at).toISOString())}</small></span></button>`).join('')
-      : '<div class="mut2 sm" style="padding:6px 12px 14px">Nada novo por aqui.</div>');
+      : `<div class="mut2 sm" style="padding:6px 12px 14px">${T().nothingNew}</div>`);
   m.classList.add('bell'); m.hidden = false;
   $$('[data-ev]', m).forEach(b => b.onclick = () => { m.hidden = true; openDrawer(ev[b.dataset.ev].t.id); });
   store.set(seenKey(), Date.now()); renderBell();
@@ -248,11 +436,11 @@ window.addEventListener('hashchange', openFromHash);
 /* ---------------- login ---------------- */
 function renderLogin() {
   const box = $('#people');
-  box.innerHTML = S.members.map(m => `<button class="person" data-login="${esc(m.id)}">${av(m.id)}<span><b>${esc(m.name)}</b><small>Entrar</small></span></button>`).join('')
-    + `<button class="person add" id="addPerson"><span class="plus">+</span><span><b>Não estou na lista</b><small>Adicionar meu nome</small></span></button>`;
+  box.innerHTML = S.members.map(m => `<button class="person" data-login="${esc(m.id)}">${av(m.id)}<span><b>${esc(m.name)}</b><small>${T().enter}</small></span></button>`).join('')
+    + `<button class="person add" id="addPerson"><span class="plus">+</span><span><b>${T().notListed}</b><small>${T().addMyName}</small></span></button>`;
   $$('[data-login]', box).forEach(b => b.onclick = () => login(b.dataset.login));
   $('#addPerson').onclick = () => { $('#addForm').hidden = false; $('#addName').focus(); };
-  if (!S.loaded) box.innerHTML = '<div class="mut">Carregando a equipe…</div>';
+  if (!S.loaded) box.innerHTML = `<div class="mut">${T().loadingTeam}</div>`;
 }
 $('#addForm').onsubmit = async e => {
   e.preventDefault();
@@ -262,7 +450,7 @@ $('#addForm').onsubmit = async e => {
   if (ex) { login(ex.id); return; }
   try { const m = await api.addMember(name); await reload(); login(m.id); } catch (err) { toast(errMsg(err)); }
 };
-function login(id) { S.me = id; store.set('jira.me', id); S.filter = 'all'; route(); toast(`Olá, ${first(id)}.`); }
+function login(id) { S.me = id; store.set('jira.me', id); S.filter = 'all'; route(); toast(T().hello(first(id))); }
 function logout() { S.me = null; store.set('jira.me', null); closeDrawer(true); route(); }
 
 /* ---------------- board ---------------- */
@@ -277,40 +465,41 @@ function renderApp() {
   $('#meBtn').innerHTML = `${av(S.me)}<span>${esc(first(S.me))}</span>`;
   renderBell();
   if (!renderApp.hashDone && S.loaded) { renderApp.hashDone = true; setTimeout(openFromHash, 0); }
-  $('#today').textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('#today').textContent = new Date().toLocaleDateString(T().locale, { weekday: 'long', day: 'numeric', month: 'long' });
   const week = Date.now() - 7 * 864e5;
   $('#stats').innerHTML = [
-    [S.tasks.filter(t => t.status === 'doing').length, 'em andamento'],
-    [S.tasks.filter(t => t.status === 'review').length, 'em revisão'],
-    [S.tasks.filter(t => t.status === 'done' && ts(t.done_at) > week).length, 'feitas em 7 dias'],
+    [S.tasks.filter(t => t.status === 'doing').length, T().statDoing],
+    [S.tasks.filter(t => t.status === 'review').length, T().statReview],
+    [S.tasks.filter(t => t.status === 'done' && ts(t.done_at) > week).length, T().statDone],
   ].map(([n, l]) => `<div><b>${n}</b>${l}</div>`).join('');
   const nRev = S.tasks.filter(toReview).length;
   const tb = $('#toolbar');
   if (!tb.dataset.built) {
     tb.dataset.built = '1';
-    tb.innerHTML = `<span id="chips" style="display:contents"></span><label class="search">${IC.search}<input id="q" type="search" placeholder="Buscar" aria-label="Buscar tarefas"></label>`;
+    tb.innerHTML = `<span id="chips" style="display:contents"></span><label class="search">${IC.search}<input id="q" type="search" placeholder="${T().search}" aria-label="${T().searchAria}"></label>`;
+    $('#q').value = S.q;
     $('#q').oninput = e => { S.q = e.target.value.trim(); renderBoard(); };
   }
-  $('#chips').innerHTML = [['all', 'Todas'], ['mine', 'Minhas'], ['rev', 'Para eu revisar'], ['high', 'Prioridade alta']]
+  $('#chips').innerHTML = [['all', T().fAll], ['mine', T().fMine], ['rev', T().fRev], ['high', T().fHigh]]
     .map(([k, l]) => `<button class="chip ${S.filter === k ? 'on' : ''}" data-f="${k}">${l}${k === 'rev' && nRev ? `<span class="n">${nRev}</span>` : ''}</button>`).join('');
   renderBoard();
   if (S.openId) fillDrawer();
 }
 function renderBoard() {
-  const by = {}; LANES.forEach(([k]) => by[k] = []);
+  const by = {}; LANES.forEach(k => by[k] = []);
   S.tasks.filter(visible).forEach(t => (by[t.status] || by.backlog).push(t));
   for (const k in by) by[k].sort((a, b) => (PRANK[a.priority] - PRANK[b.priority]) || (ts(b.updated_at) - ts(a.updated_at)));
-  $('#tabs').innerHTML = LANES.map(([k, l]) => `<button class="tab ${S.lane === k ? 'on' : ''}" style="--lc:var(--l-${k})" data-lane="${k}">${l}<span>${by[k].length}</span></button>`).join('');
-  $('#board').innerHTML = LANES.map(([k, l]) => `
+  $('#tabs').innerHTML = LANES.map(k => [k, LN[k]]).map(([k, l]) => `<button class="tab ${S.lane === k ? 'on' : ''}" style="--lc:var(--l-${k})" data-lane="${k}">${l}<span>${by[k].length}</span></button>`).join('');
+  $('#board').innerHTML = LANES.map(k => [k, LN[k]]).map(([k, l]) => `
     <section class="col ${S.lane === k ? 'on' : ''}" data-col="${k}" style="--lc:var(--l-${k})">
-      <div class="colh"><i></i><span class="eb">${l}</span><span class="cnt">${by[k].length}</span>${['backlog', 'todo', 'doing'].includes(k) ? `<button class="add" data-new="${k}" title="Nova tarefa em ${l}">+</button>` : ''}</div>
+      <div class="colh"><i></i><span class="eb">${l}</span><span class="cnt">${by[k].length}</span>${['backlog', 'todo', 'doing'].includes(k) ? `<button class="add" data-new="${k}" title="${T().newIn(l)}">+</button>` : ''}</div>
       <div class="cards">${by[k].length ? by[k].map(card).join('') : `<div class="empty">${emptyMsg(k)}</div>`}</div>
     </section>`).join('');
 }
 function emptyMsg(k) {
-  if (!S.tasks.length && (k === 'todo')) return 'Nenhuma tarefa ainda.<br>Comece com <b>+ Nova tarefa</b>.';
-  if (S.filter === 'rev' && k === 'review') return 'Nada esperando sua revisão.';
-  return { backlog: 'Ideias e pedidos', todo: 'Nada planejado', doing: 'Ninguém trabalhando', review: 'Nada em revisão', done: 'Nada concluído' }[k];
+  if (!S.tasks.length && (k === 'todo')) return T().emptyFirst;
+  if (S.filter === 'rev' && k === 'review') return T().emptyRev;
+  return T().empty[k];
 }
 function card(t) {
   const fl = filesOf(t.id).length, cm = commentsOf(t.id).filter(c => c.kind === 'comment').length;
@@ -323,8 +512,8 @@ function card(t) {
       ${sp > 0 || run ? `<span class="tm ${run ? 'run' : ''}" data-tid="${esc(t.id)}">${dur(sp)}</span>` : ''}</div>
     <h3>${esc(t.title)}</h3>
     ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-    <div class="f">${av(t.owner_id, 'xs')}<span>${esc(t.owner_id ? first(t.owner_id) : 'Sem responsável')}</span><span class="sp"></span>
-      ${d.length ? `<span class="meta" title="Definição de pronto" style="${dn === d.length ? 'color:var(--ok)' : ''}">${IC.check}${dn}/${d.length}</span>` : ''}
+    <div class="f">${av(t.owner_id, 'xs')}<span>${esc(t.owner_id ? first(t.owner_id) : T().noOwner)}</span><span class="sp"></span>
+      ${d.length ? `<span class="meta" title="${T().dodShort}" style="${dn === d.length ? 'color:var(--ok)' : ''}">${IC.check}${dn}/${d.length}</span>` : ''}
       ${fl ? `<span class="meta">${IC.clip}${fl}</span>` : ''}${cm ? `<span class="meta">${IC.msg}${cm}</span>` : ''}</div>${rv}</article>`;
 }
 
@@ -342,8 +531,9 @@ $('#bellBtn').onclick = e => { e.stopPropagation(); const m = $('#menu'); if (!m
 $('#themeBtn').onclick = () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
 $('#meBtn').onclick = () => {
   const m = $('#menu'); m.classList.remove('bell');
-  m.innerHTML = `<div style="padding:10px 12px 8px"><div class="eb" style="color:var(--mut2)">Conectado como</div><div class="serif" style="font-size:20px;margin-top:4px">${esc(nm(S.me))}</div></div><hr>
-    <button id="mSwitch">Trocar de pessoa</button><button id="mTheme">Alternar tema claro/escuro</button>`;
+  m.innerHTML = `<div style="padding:10px 12px 8px"><div class="eb" style="color:var(--mut2)">${T().signedAs}</div><div class="serif" style="font-size:20px;margin-top:4px">${esc(nm(S.me))}</div></div><hr>
+    <button id="mSwitch">${T().switchPerson}</button><button id="mTheme">${T().toggleTheme}</button><hr><div style="display:flex;align-items:center;gap:10px;padding:6px 12px 8px"><span class="mut2 sm" style="flex:1">${T().lang}</span><span class="segs langsw sm"></span></div>`;
+  $$('.langsw', m).forEach(sw => { sw.innerHTML = LANG_KEYS.map(k => `<button type="button" class="${k === LANG ? 'on' : ''}" data-lang="${k}">${k.toUpperCase()}</button>`).join(''); });
   m.hidden = !m.hidden;
   $('#mSwitch').onclick = () => { m.hidden = true; logout(); };
   $('#mTheme').onclick = () => { m.hidden = true; $('#themeBtn').click(); };
@@ -361,10 +551,10 @@ document.addEventListener('drop', e => { const col = e.target.closest && e.targe
 /* ---------------- rules ---------------- */
 async function moveTask(t, to) {
   if (t.status === to) return;
-  if (!canMove(t)) { toast(`Só ${first(t.owner_id)}, responsável pela tarefa, pode movê-la.`); return; }
-  if (to === 'done' && t.status === 'review') { toast('Em revisão, a tarefa vai para Feito quando todos aprovarem. Para concluir sem revisão, retire da revisão antes.'); return; }
+  if (!canMove(t)) { toast(T().onlyOwnerMoves(first(t.owner_id))); return; }
+  if (to === 'done' && t.status === 'review') { toast(T().reviewToDone); return; }
   if (to === 'review' || to === 'done') {
-    if (!dodOk(t)) { toast((dod(t).length ? 'Marque todos os itens da definição de pronto antes de ' : 'Escreva a definição de pronto antes de ') + (to === 'done' ? 'concluir.' : 'enviar para revisão.')); openDrawer(t.id); setTimeout(() => { const el = $('#dodSec'); el && el.scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#dodNew') && $('#dodNew').focus(); }, 280); return; }
+    if (!dodOk(t)) { toast(dod(t).length ? T().dodOpen(to) : T().dodMissing(to)); openDrawer(t.id); setTimeout(() => { const el = $('#dodSec'); el && el.scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#dodNew') && $('#dodNew').focus(); }, 280); return; }
     if (to === 'review') { openReviewChooser(t); return; }
   }
   const ok = await act(async () => {
@@ -372,61 +562,63 @@ async function moveTask(t, to) {
     const patch = { status: to }; if (t.status === 'review') patch.approvals = {}; if (!t.owner_id) patch.owner_id = S.me;
     if (to === 'done') { patch.reviewers = []; patch.approvals = {}; }
     await api.updateTask(t.id, patch);
-  }, to === 'done' ? `${code(t)} concluída` : t.status === 'review' ? 'Tarefa retirada da revisão' : null);
+  }, to === 'done' ? T().finished(code(t)) : t.status === 'review' ? T().outOfReview : null);
   if (ok) { S.lane = to; renderBoard(); if (to === 'done') offerShare('done', S.tasks.find(x => x.id === t.id) || t); }
 }
 
 /* ---------------- modal ---------------- */
 function openModal(html) { $('#mbox').innerHTML = html; $('#modal').classList.add('on'); }
 function closeModal() { $('#modal').classList.remove('on'); }
-const memberOpts = sel => `<option value="">Sem responsável</option>` + S.members.map(m => `<option value="${esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}${m.id === S.me ? ' (você)' : ''}</option>`).join('');
+const memberOpts = sel => `<option value="">${T().noOwner}</option>` + S.members.map(m => `<option value="${esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}${m.id === S.me ? ` (${T().you})` : ''}</option>`).join('');
 
 function openNew(lane) {
   const start = ['backlog', 'todo', 'doing'].includes(lane) ? lane : (['backlog', 'todo', 'doing'].includes(S.lane) ? S.lane : 'todo');
-  openModal(`<div class="eb">Nova tarefa</div><h2 style="margin-top:6px">O que precisa ser feito?</h2>
-    <label class="lb" for="nTitle">Título</label><input class="in" id="nTitle" maxlength="200" placeholder="Ex.: Revisar proposta do cliente">
-    <label class="lb" for="nDesc">Descrição</label><textarea class="in" id="nDesc" rows="3" placeholder="Contexto, links, detalhes"></textarea>
-    <label class="lb" for="nDod">Definição de pronto</label><textarea class="in" id="nDod" rows="3" style="min-height:80px" placeholder="Um critério por linha. Ex.:&#10;Cliente aprovou o escopo&#10;Arquivo final anexado"></textarea>
-    <div class="hint">Só é cobrada ao mover para Revisão ou Feito. Dá para escrever depois.</div>
-    <div class="grid2"><div><label class="lb" for="nLane">Raia</label><select class="sel" id="nLane">${['backlog', 'todo', 'doing'].map(k => `<option value="${k}" ${k === start ? 'selected' : ''}>${LN[k]}</option>`).join('')}</select></div>
-      <div><label class="lb" for="nOwner">Responsável</label><select class="sel" id="nOwner">${memberOpts(S.me)}</select></div></div>
-    <label class="lb">Prioridade</label><div class="segs" id="nPri">${['high', 'medium', 'low'].map(k => `<button type="button" class="${k} ${k === 'medium' ? 'on' : ''}" data-p="${k}">${PRI[k]}</button>`).join('')}</div>
-    <label class="lb" for="nFiles">Anexos</label><input type="file" id="nFiles" multiple class="in" style="padding:8px">
-    <div class="mfoot"><button class="btn ghost" id="nCancel">Cancelar</button><button class="btn pri" id="nGo">Criar tarefa</button></div>`);
+  const L = T();
+  openModal(`<div class="eb">${L.nNewEb}</div><h2 style="margin-top:6px">${L.nNewH}</h2>
+    <label class="lb" for="nTitle">${L.fTitle}</label><input class="in" id="nTitle" maxlength="200" placeholder="${L.fTitlePh}">
+    <label class="lb" for="nDesc">${L.fDesc}</label><textarea class="in" id="nDesc" rows="3" placeholder="${L.fDescPh}"></textarea>
+    <label class="lb" for="nDod">${L.fDod}</label><textarea class="in" id="nDod" rows="3" style="min-height:80px" placeholder="${L.fDodPh}"></textarea>
+    <div class="hint">${L.fDodHint}</div>
+    <div class="grid2"><div><label class="lb" for="nLane">${L.fLane}</label><select class="sel" id="nLane">${['backlog', 'todo', 'doing'].map(k => `<option value="${k}" ${k === start ? 'selected' : ''}>${LN[k]}</option>`).join('')}</select></div>
+      <div><label class="lb" for="nOwner">${L.fOwner}</label><select class="sel" id="nOwner">${memberOpts(S.me)}</select></div></div>
+    <label class="lb">${L.fPri}</label><div class="segs" id="nPri">${['high', 'medium', 'low'].map(k => `<button type="button" class="${k} ${k === 'medium' ? 'on' : ''}" data-p="${k}">${PRI[k]}</button>`).join('')}</div>
+    <label class="lb" for="nFiles">${L.fFiles}</label><input type="file" id="nFiles" multiple class="in" style="padding:8px">
+    <div class="mfoot"><button class="btn ghost" id="nCancel">${L.cancel}</button><button class="btn pri" id="nGo">${L.create}</button></div>`);
   setTimeout(() => $('#nTitle').focus(), 50);
   $('#nPri').onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return; $$('#nPri button').forEach(x => x.classList.toggle('on', x === b)); };
   $('#nCancel').onclick = closeModal;
   $('#nGo').onclick = async () => {
-    const title = $('#nTitle').value.trim(); if (!title) { toast('Dê um título à tarefa.'); $('#nTitle').focus(); return; }
+    const title = $('#nTitle').value.trim(); if (!title) { toast(T().needTitle); $('#nTitle').focus(); return; }
     const items = $('#nDod').value.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({ id: uuid(), text, done: false }));
     const files = [...$('#nFiles').files];
     $('#nGo').disabled = true;
     try {
       const t = await api.createTask({ title, description: $('#nDesc').value.trim(), dod: items, status: $('#nLane').value, owner_id: $('#nOwner').value || null, priority: ($('#nPri .on') || {}).dataset.p || 'medium', created_by: S.me });
-      for (const f of files) { try { await api.upload(t.id, f, S.me); } catch (e) { toast(`Não consegui enviar ${f.name}: ${errMsg(e)}`); } }
-      closeModal(); S.lane = t.status; await reload(); toast(`${code(t)} criada`); openDrawer(t.id); offerShare('new', S.tasks.find(x => x.id === t.id) || t);
+      for (const f of files) { try { await api.upload(t.id, f, S.me); } catch (e) { toast(T().uploadFail(f.name, errMsg(e))); } }
+      closeModal(); S.lane = t.status; await reload(); toast(T().created(code(t))); openDrawer(t.id); offerShare('new', S.tasks.find(x => x.id === t.id) || t);
     } catch (e) { toast(errMsg(e)); $('#nGo').disabled = false; }
   };
 }
 
 function openReviewChooser(t) {
   const others = S.members.filter(m => m.id !== t.owner_id);
-  openModal(`<div class="eb">Revisão · ${esc(code(t))}</div><h2 style="margin-top:6px">Quem valida?</h2>
-    <p class="mut">A tarefa só vai para Feito quando todos os escolhidos aprovarem.</p>
+  const L = T();
+  openModal(`<div class="eb">${L.revEb(esc(code(t)))}</div><h2 style="margin-top:6px">${L.revH}</h2>
+    <p class="mut">${L.revLead}</p>
     ${others.map(m => `<label class="chk"><input type="checkbox" value="${esc(m.id)}">${av(m.id)}<span>${esc(m.name)}</span></label>`).join('')}
-    <label class="lb" for="rqNote">Recado (opcional)</label><textarea class="in" id="rqNote" rows="2" style="min-height:60px" placeholder="O que olhar com atenção?"></textarea>
-    <div class="mfoot"><button class="btn ghost" id="rqCancel">Cancelar</button><button class="btn pri" id="rqGo">Enviar para revisão</button></div>`);
+    <label class="lb" for="rqNote">${L.revNote}</label><textarea class="in" id="rqNote" rows="2" style="min-height:60px" placeholder="${L.revNotePh}"></textarea>
+    <div class="mfoot"><button class="btn ghost" id="rqCancel">${L.cancel}</button><button class="btn pri" id="rqGo">${L.sendReview}</button></div>`);
   $('#rqCancel').onclick = closeModal;
   $('#rqGo').onclick = async () => {
     const ids = $$('#mbox .chk input:checked').map(i => i.value);
-    if (!ids.length) { toast('Escolha pelo menos uma pessoa.'); return; }
+    if (!ids.length) { toast(T().pickOne); return; }
     const note = $('#rqNote').value.trim();
     $('#rqGo').disabled = true;
     const ok = await act(async () => {
       if (t.timer_started_at) await api.timer(t.id, false);
       await api.updateTask(t.id, { status: 'review', reviewers: ids, approvals: {} });
       await api.addComment({ task_id: t.id, author_id: S.me, kind: 'review', body: note, meta: { to: ids } });
-    }, `Enviada para revisão de ${ids.map(first).join(' e ')}`);
+    }, T().sentReview(ids.map(first).join(T().and)));
     if (ok) { closeModal(); S.lane = 'review'; renderBoard(); offerShare('review', S.tasks.find(x => x.id === t.id) || t, ids); } else $('#rqGo').disabled = false;
   };
 }
@@ -438,30 +630,30 @@ function openDrawer(id) {
   if (!S.tasks.find(t => t.id === id)) return;
   S.openId = id; base = null;
   const tt = S.tasks.find(t => t.id === id); try { history.replaceState(null, '', '#' + code(tt)); } catch (_) {}
-  const d = $('#drawer');
-  d.innerHTML = `<div class="dr-head"><span class="lane-tag" id="dLane"></span><span class="mut2 sm" id="dCode" style="font-weight:700;letter-spacing:.06em"></span><span class="grow"></span><button class="icon-btn" id="dClose" aria-label="Fechar">${IC.close}</button></div>
+  const d = $('#drawer'), L = T();
+  d.innerHTML = `<div class="dr-head"><span class="lane-tag" id="dLane"></span><span class="mut2 sm" id="dCode" style="font-weight:700;letter-spacing:.06em"></span><span class="grow"></span><button class="icon-btn" id="dClose" aria-label="${L.close}">${IC.close}</button></div>
   <div class="dr-body">
     <textarea class="ttl" id="dTitle" rows="1" maxlength="200"></textarea>
     <div class="lanes" id="dLanes" style="margin-top:12px"></div><div class="hint" id="dHint"></div>
     <dl class="props">
-      <dt>Responsável</dt><dd><select class="sel" id="dOwner"></select></dd>
-      <dt>Prioridade</dt><dd><div class="segs" id="dPri"></div></dd>
-      <dt>Criada</dt><dd class="mut sm" id="dCreated"></dd>
+      <dt>${L.owner}</dt><dd><select class="sel" id="dOwner"></select></dd>
+      <dt>${L.priority}</dt><dd><div class="segs" id="dPri"></div></dd>
+      <dt>${L.createdL}</dt><dd class="mut sm" id="dCreated"></dd>
     </dl>
-    <div class="sec" id="dodSec"><div class="lb">${IC.check.replace('<svg', '<svg width="14" height="14"')}Definição de pronto <span id="dodProg" style="margin-left:auto;letter-spacing:.05em"></span></div>
+    <div class="sec" id="dodSec"><div class="lb">${IC.check.replace('<svg', '<svg width="14" height="14"')}${L.dodShort} <span id="dodProg" style="margin-left:auto;letter-spacing:.05em"></span></div>
       <div id="dodList"></div>
-      <div class="linkrow" id="dodAdd"><input class="in" id="dodNew" maxlength="200" placeholder="Adicionar critério de pronto"><button class="btn sm" id="dodAddBtn">Adicionar</button></div>
+      <div class="linkrow" id="dodAdd"><input class="in" id="dodNew" maxlength="200" placeholder="${L.dodAddPh}"><button class="btn sm" id="dodAddBtn">${L.add}</button></div>
       <div class="hint" id="dodHint"></div></div>
-    <div class="sec"><div class="lb">Tempo dedicado</div><div class="timer"><span class="big" id="dTime" data-long="1"></span><button class="btn" id="dTimerBtn"></button></div><div class="hint" id="dTimeHint"></div></div>
+    <div class="sec"><div class="lb">${L.timeSpent}</div><div class="timer"><span class="big" id="dTime" data-long="1"></span><button class="btn" id="dTimerBtn"></button></div><div class="hint" id="dTimeHint"></div></div>
     <div class="sec" id="dRev"></div>
-    <div class="sec"><div class="lb">Descrição</div><textarea class="in" id="dDesc" rows="5" placeholder="Contexto, links, detalhes"></textarea>
-      <div class="savebar" id="dSave" hidden><button class="btn pri sm" id="dSaveBtn">Salvar</button><button class="btn ghost sm" id="dDiscard">Descartar</button></div></div>
-    <div class="sec"><div class="lb">Anexos</div><div id="dFiles"></div>
-      <div class="upl"><label class="btn sm">+ Arquivo<input type="file" id="dFile" multiple hidden></label><button class="btn sm" id="dLinkBtn">+ Link</button></div>
-      <div class="linkrow" id="dLinkRow" hidden><input class="in" id="dUrl" type="url" placeholder="https://… (Drive, Figma, Notion)"><button class="btn pri sm" id="dLinkAdd">Adicionar</button></div>
+    <div class="sec"><div class="lb">${L.descL}</div><textarea class="in" id="dDesc" rows="5" placeholder="${L.fDescPh}"></textarea>
+      <div class="savebar" id="dSave" hidden><button class="btn pri sm" id="dSaveBtn">${L.save}</button><button class="btn ghost sm" id="dDiscard">${L.discard}</button></div></div>
+    <div class="sec"><div class="lb">${L.attachments}</div><div id="dFiles"></div>
+      <div class="upl"><label class="btn sm">${L.addFile}<input type="file" id="dFile" multiple hidden></label><button class="btn sm" id="dLinkBtn">${L.addLink}</button></div>
+      <div class="linkrow" id="dLinkRow" hidden><input class="in" id="dUrl" type="url" placeholder="${L.linkPh}"><button class="btn pri sm" id="dLinkAdd">${L.add}</button></div>
       <div class="hint" id="dUpMsg"></div></div>
-    <div class="sec"><div class="lb">Atividade</div><div id="dComments"></div>
-      <div class="cbox"><textarea class="in" id="dCText" rows="2" placeholder="Escreva um comentário"></textarea><button class="btn pri" id="dCSend">Enviar</button></div></div>
+    <div class="sec"><div class="lb">${L.activity}</div><div id="dComments"></div>
+      <div class="cbox"><textarea class="in" id="dCText" rows="2" placeholder="${L.commentPh}"></textarea><button class="btn pri" id="dCSend">${L.send}</button></div></div>
     <div class="dfoot" id="dFoot"></div>
   </div>`;
   $('#scrim').classList.add('on'); d.classList.add('on');
@@ -487,56 +679,53 @@ function openDrawer(id) {
 }
 const cur = () => S.tasks.find(t => t.id === S.openId);
 function closeDrawer(force) {
-  if (!force && S.openId && dirty()) { toast('Há alterações não salvas. Salve ou descarte.'); return; }
+  if (!force && S.openId && dirty()) { toast(T().unsaved); return; }
   $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); S.openId = null;
   try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
 }
 function fillDrawer() {
   const t = cur();
   if (!t) { closeDrawer(true); return; }
-  const mov = canMove(t), locked = t.status === 'review' || t.status === 'done';
+  const mov = canMove(t), locked = t.status === 'review' || t.status === 'done', L = T();
   const tag = $('#dLane'); tag.textContent = LN[t.status]; tag.style.setProperty('--lc', `var(--l-${t.status})`);
   $('#dCode').textContent = code(t);
   const ti = $('#dTitle'), de = $('#dDesc');
   if (!dirty() && document.activeElement !== ti && document.activeElement !== de) { ti.value = t.title; de.value = t.description || ''; base = { title: ti.value, desc: de.value }; ti.style.height = 'auto'; ti.style.height = ti.scrollHeight + 'px'; }
   // lanes
-  $('#dLanes').innerHTML = LANES.map(([k, l]) => `<button class="${t.status === k ? 'on' : ''}" style="--lc:var(--l-${k})" data-mv="${k}" ${(!mov || (k === 'done' && t.status === 'review') || (t.status === 'done' && k === 'review')) && t.status !== k ? 'disabled' : ''}><i></i>${l}</button>`).join('');
+  $('#dLanes').innerHTML = LANES.map(k => [k, LN[k]]).map(([k, l]) => `<button class="${t.status === k ? 'on' : ''}" style="--lc:var(--l-${k})" data-mv="${k}" ${(!mov || (k === 'done' && t.status === 'review') || (t.status === 'done' && k === 'review')) && t.status !== k ? 'disabled' : ''}><i></i>${l}</button>`).join('');
   $$('#dLanes [data-mv]').forEach(b => b.onclick = () => moveTask(cur(), b.dataset.mv));
-  $('#dHint').textContent = !mov ? `Só ${first(t.owner_id)}, responsável, move esta tarefa.`
-    : t.status === 'review' ? 'Em revisão. Vai para Feito quando todos os revisores aprovarem.'
-    : t.status === 'done' ? 'Concluída. Você pode reabrir movendo para outra raia.'
-    : 'Com a definição de pronto completa: envie para Revisão ou, se não precisar de validação, mova direto para Feito.';
+  $('#dHint').textContent = !mov ? L.hintNotOwner(first(t.owner_id)) : t.status === 'review' ? L.hintReview : t.status === 'done' ? L.hintDone : L.hintOpen;
   const os = $('#dOwner'); os.innerHTML = memberOpts(t.owner_id); os.disabled = !mov || locked;
   $('#dPri').innerHTML = ['high', 'medium', 'low'].map(k => `<button type="button" class="${k} ${t.priority === k ? 'on' : ''}" data-p="${k}">${PRI[k]}</button>`).join('');
-  $('#dCreated').textContent = `por ${first(t.created_by)} · ${ago(t.created_at)}`;
+  $('#dCreated').textContent = L.by(first(t.created_by), ago(t.created_at));
   // definition of done
   const items = dod(t), dn = items.filter(i => i.done).length;
-  $('#dodProg').textContent = items.length ? `${dn} de ${items.length}` : '';
+  $('#dodProg').textContent = items.length ? L.dodOf(dn, items.length) : '';
   $('#dodProg').style.color = items.length && dn === items.length ? 'var(--ok)' : '';
-  $('#dodList').innerHTML = items.length ? items.map(i => `<label class="chk" style="margin-top:6px"><input type="checkbox" data-dod="${esc(i.id)}" ${i.done ? 'checked' : ''} ${locked ? 'disabled' : ''}><span style="flex:1;${i.done ? 'text-decoration:line-through;color:var(--mut2)' : ''}">${esc(i.text)}</span>${locked ? '' : `<button class="icon-btn" style="width:28px;height:28px" data-dodrm="${esc(i.id)}" aria-label="Remover critério">${IC.close}</button>`}</label>`).join('')
-    : '<div class="empty" style="text-align:left;padding:14px">Sem definição de pronto. Escreva os critérios que dizem quando esta tarefa está concluída.</div>';
+  $('#dodList').innerHTML = items.length ? items.map(i => `<label class="chk" style="margin-top:6px"><input type="checkbox" data-dod="${esc(i.id)}" ${i.done ? 'checked' : ''} ${locked ? 'disabled' : ''}><span style="flex:1;${i.done ? 'text-decoration:line-through;color:var(--mut2)' : ''}">${esc(i.text)}</span>${locked ? '' : `<button class="icon-btn" style="width:28px;height:28px" data-dodrm="${esc(i.id)}" aria-label="${L.removeCrit}">${IC.close}</button>`}</label>`).join('')
+    : `<div class="empty" style="text-align:left;padding:14px">${L.dodEmpty}</div>`;
   $$('[data-dod]').forEach(c => c.onchange = () => setDod(dod(cur()).map(i => i.id === c.dataset.dod ? Object.assign({}, i, { done: c.checked }) : i)));
   $$('[data-dodrm]').forEach(b => b.onclick = e => { e.preventDefault(); setDod(dod(cur()).filter(i => i.id !== b.dataset.dodrm)); });
   $('#dodAdd').hidden = locked;
-  $('#dodHint').textContent = locked ? (t.status === 'review' ? 'Travada durante a revisão. Retire da revisão para alterar.' : 'Critérios cumpridos e validados.') : '';
+  $('#dodHint').textContent = locked ? (t.status === 'review' ? L.dodLockedReview : L.dodLockedDone) : '';
   // timer
   const run = !!t.timer_started_at, tEl = $('#dTime');
   tEl.dataset.tid = t.id; tEl.textContent = dur(spent(t), true); tEl.classList.toggle('run', run);
   const tb = $('#dTimerBtn'), open = ['backlog', 'todo', 'doing'].includes(t.status);
-  tb.textContent = run ? 'Pausar' : (spent(t) ? 'Retomar' : 'Iniciar'); tb.className = 'btn ' + (run ? 'warn' : 'pri');
+  tb.textContent = run ? L.pause : (spent(t) ? L.resume : L.start); tb.className = 'btn ' + (run ? 'warn' : 'pri');
   tb.hidden = !(mov && (open || run));
-  $('#dTimeHint').textContent = run ? `Contando desde ${new Date(ts(t.timer_started_at)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Pausa sozinho ao sair de Fazendo.`
-    : (mov && open ? 'Iniciar o cronômetro move a tarefa para Fazendo.' : '');
+  $('#dTimeHint').textContent = run ? L.countingSince(new Date(ts(t.timer_started_at)).toLocaleTimeString(L.locale, { hour: '2-digit', minute: '2-digit' }))
+    : (mov && open ? L.timerHint : '');
   // review
   const rv = $('#dRev'), keep = $('#rNote') ? $('#rNote').value : '', hadFocus = document.activeElement && document.activeElement.id === 'rNote';
   const revs = t.reviewers || [], ap = t.approvals || {};
   if ((t.status === 'review' || t.status === 'done') && revs.length) {
     const amRev = t.status === 'review' && revs.includes(S.me) && !ap[S.me];
-    rv.innerHTML = `<div class="revbox ${t.status === 'done' ? 'done' : ''}"><h4>${t.status === 'done' ? 'Validada' : 'Aguardando validação'}</h4>
-      ${revs.map(r => `<div class="revrow">${av(r)}<span>${esc(nm(r))}${r === S.me ? ' <span class="mut2">(você)</span>' : ''}</span><span class="st ${ap[r] ? 'ok' : 'pend'}">${ap[r] ? '✓ Aprovou · ' + ago(ap[r]) : 'Pendente'}</span></div>`).join('')}
-      ${amRev ? `<textarea class="in" id="rNote" rows="2" style="min-height:60px;margin-top:10px" placeholder="Comentário (obrigatório para pedir ajustes)"></textarea>
-        <div class="revact"><button class="btn ok" id="rOk">Aprovar</button><button class="btn warn" id="rNo">Pedir ajustes</button></div>` : ''}
-      ${t.status === 'review' && t.owner_id === S.me ? `<div class="revact"><button class="btn ghost sm" id="rCancel">Retirar da revisão</button></div>` : ''}</div>`;
+    rv.innerHTML = `<div class="revbox ${t.status === 'done' ? 'done' : ''}"><h4>${t.status === 'done' ? L.validated : L.awaiting}</h4>
+      ${revs.map(r => `<div class="revrow">${av(r)}<span>${esc(nm(r))}${r === S.me ? ` <span class="mut2">(${L.you})</span>` : ''}</span><span class="st ${ap[r] ? 'ok' : 'pend'}">${ap[r] ? L.approved(ago(ap[r])) : L.pending}</span></div>`).join('')}
+      ${amRev ? `<textarea class="in" id="rNote" rows="2" style="min-height:60px;margin-top:10px" placeholder="${L.rNotePh}"></textarea>
+        <div class="revact"><button class="btn ok" id="rOk">${L.approve}</button><button class="btn warn" id="rNo">${L.requestChanges}</button></div>` : ''}
+      ${t.status === 'review' && t.owner_id === S.me ? `<div class="revact"><button class="btn ghost sm" id="rCancel">${L.takeOut}</button></div>` : ''}</div>`;
     if (amRev) { $('#rNote').value = keep; if (hadFocus) $('#rNote').focus(); $('#rOk').onclick = approve; $('#rNo').onclick = requestChanges; }
     if ($('#rCancel')) $('#rCancel').onclick = () => moveTask(cur(), 'doing');
   } else rv.innerHTML = '';
@@ -546,19 +735,19 @@ function fillDrawer() {
   if (need.length) api.signed(need).then(o => { Object.assign(S.urls, o); if (S.openId === t.id) fillFiles(t); }).catch(() => {});
   fillFiles(t);
   // comments
-  const kinds = { review: 'pediu revisão', approve: 'aprovou', changes: 'pediu ajustes' };
+  const kinds = L.kinds;
   const cms = commentsOf(t.id);
   $('#dComments').innerHTML = cms.length ? cms.map(c => `<div class="cm">${av(c.author_id)}<div class="b"><div class="h"><b>${esc(first(c.author_id))}</b>${kinds[c.kind] ? `<span class="kind ${c.kind}">${kinds[c.kind]}${c.kind === 'review' && c.meta && c.meta.to ? ' · ' + esc(c.meta.to.map(first).join(', ')) : ''}</span>` : ''} · ${ago(c.created_at)}</div>${c.body ? `<div class="t">${esc(c.body)}</div>` : ''}</div></div>`).join('')
-    : '<div class="mut2 sm">Sem comentários.</div>';
+    : `<div class="mut2 sm">${L.noComments}</div>`;
   // footer
   const ft = $('#dFoot');
   if (!ft.dataset.confirm) {
-    ft.innerHTML = `<span class="mut2 sm" style="flex:1">Atualizada ${ago(t.updated_at)}</span>` + ((t.owner_id === S.me || t.created_by === S.me || !t.owner_id) ? `<button class="btn warn sm" id="dDel">Excluir</button>` : '');
+    ft.innerHTML = `<span class="mut2 sm" style="flex:1">${L.updated(ago(t.updated_at))}</span>` + ((t.owner_id === S.me || t.created_by === S.me || !t.owner_id) ? `<button class="btn warn sm" id="dDel">${L.del}</button>` : '');
     if ($('#dDel')) $('#dDel').onclick = () => {
       ft.dataset.confirm = '1';
-      ft.innerHTML = `<span style="flex:1;font-weight:600">Excluir ${esc(code(t))} de vez?</span><button class="btn ghost sm" id="dDelNo">Cancelar</button><button class="btn warn sm" id="dDelYes">Excluir</button>`;
+      ft.innerHTML = `<span style="flex:1;font-weight:600">${L.delConfirm(esc(code(t)))}</span><button class="btn ghost sm" id="dDelNo">${L.cancel}</button><button class="btn warn sm" id="dDelYes">${L.del}</button>`;
       $('#dDelNo').onclick = () => { delete ft.dataset.confirm; fillDrawer(); };
-      $('#dDelYes').onclick = async () => { base = null; const tt = cur(); closeDrawer(true); await act(() => api.deleteTask(tt), `${code(tt)} excluída`); };
+      $('#dDelYes').onclick = async () => { base = null; const tt = cur(); closeDrawer(true); await act(() => api.deleteTask(tt), T().deleted(code(tt))); };
     };
   }
 }
@@ -570,16 +759,16 @@ function fillFiles(t) {
     const ext = f.kind === 'link' ? 'link' : (String(f.name).split('.').pop() || 'arq').slice(0, 4);
     return `<div class="file">${img ? `<img class="th" src="${esc(href)}" alt="">` : `<span class="th">${esc(ext)}</span>`}
       <div class="fn">${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>` : `<span style="font-weight:600">${esc(f.name)}</span>`}
-      <div class="mut2 sm">${f.kind === 'link' ? 'Link' : esc(size(f.size))} · ${esc(first(f.uploaded_by))} · ${ago(f.created_at)}</div></div>
-      <button class="icon-btn" style="width:30px;height:30px" data-rmf="${esc(f.id)}" aria-label="Remover anexo">${IC.close}</button></div>`;
-  }).join('') : '<div class="mut2 sm" style="margin-bottom:10px">Nenhum anexo.</div>';
-  $$('[data-rmf]').forEach(b => b.onclick = () => { const f = S.files.find(x => x.id === b.dataset.rmf); if (f) act(() => api.removeFile(f), 'Anexo removido'); });
+      <div class="mut2 sm">${f.kind === 'link' ? T().link : esc(size(f.size))} · ${esc(first(f.uploaded_by))} · ${ago(f.created_at)}</div></div>
+      <button class="icon-btn" style="width:30px;height:30px" data-rmf="${esc(f.id)}" aria-label="${T().removeAtt}">${IC.close}</button></div>`;
+  }).join('') : `<div class="mut2 sm" style="margin-bottom:10px">${T().noAtt}</div>`;
+  $$('[data-rmf]').forEach(b => b.onclick = () => { const f = S.files.find(x => x.id === b.dataset.rmf); if (f) act(() => api.removeFile(f), T().attRemoved); });
 }
 async function saveText() {
   const t = cur(); if (!t) return;
-  const title = $('#dTitle').value.trim(); if (!title) { toast('O título não pode ficar vazio.'); return; }
+  const title = $('#dTitle').value.trim(); if (!title) { toast(T().titleEmpty); return; }
   const description = $('#dDesc').value;
-  if (await act(() => api.updateTask(t.id, { title, description }), 'Salvo')) { base = { title: $('#dTitle').value, desc: description }; $('#dSave').hidden = true; }
+  if (await act(() => api.updateTask(t.id, { title, description }), T().saved)) { base = { title: $('#dTitle').value, desc: description }; $('#dSave').hidden = true; }
 }
 function setDod(items) { const t = cur(); if (t) return act(() => api.updateTask(t.id, { dod: items })); }
 async function addDod() {
@@ -589,14 +778,14 @@ async function addDod() {
 async function toggleTimer() {
   const t = cur(); if (!t || !canMove(t)) return;
   const start = !t.timer_started_at;
-  const ok = await act(() => api.timer(t.id, start), start ? 'Cronômetro iniciado' : 'Cronômetro pausado');
+  const ok = await act(() => api.timer(t.id, start), start ? T().timerStarted : T().timerPaused);
   if (ok && start) { S.lane = 'doing'; renderBoard(); }
 }
 async function upload(files) {
   const t = cur(); if (!t) return;
   for (const f of files) {
-    if (f.size > 50 * 1024 * 1024) { toast(`${f.name} passa de 50 MB.`); continue; }
-    $('#dUpMsg').textContent = `Enviando ${f.name}…`;
+    if (f.size > 50 * 1024 * 1024) { toast(T().tooBig(f.name)); continue; }
+    $('#dUpMsg').textContent = T().uploading(f.name);
     await act(() => api.upload(t.id, f, S.me));
   }
   $('#dUpMsg').textContent = '';
@@ -604,8 +793,8 @@ async function upload(files) {
 async function addLink() {
   let u = $('#dUrl').value.trim(); if (!u) return;
   if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
-  let name; try { const x = new URL(u); name = x.hostname.replace(/^www\./, '') + (x.pathname.length > 1 ? x.pathname.slice(0, 48) : ''); } catch (_) { toast('Link inválido.'); return; }
-  if (await act(() => api.addLink(S.openId, name, u, S.me), 'Link adicionado')) { $('#dUrl').value = ''; $('#dLinkRow').hidden = true; }
+  let name; try { const x = new URL(u); name = x.hostname.replace(/^www\./, '') + (x.pathname.length > 1 ? x.pathname.slice(0, 48) : ''); } catch (_) { toast(T().badLink); return; }
+  if (await act(() => api.addLink(S.openId, name, u, S.me), T().linkAdded)) { $('#dUrl').value = ''; $('#dLinkRow').hidden = true; }
 }
 async function sendComment() {
   const el = $('#dCText'), body = el.value.trim(); if (!body) return;
@@ -616,16 +805,16 @@ async function approve() {
   await act(async () => {
     const r = await api.approve(t.id, S.me, note);
     const row = Array.isArray(r) ? r[0] : r;
-    setTimeout(() => { toast(row && row.status === 'done' ? 'Aprovada por todos. Movida para Feito.' : 'Aprovação registrada.'); if (row && row.status === 'done') offerShare('done', S.tasks.find(x => x.id === t.id) || row); }, 50);
+    setTimeout(() => { toast(row && row.status === 'done' ? T().allApproved : T().approvalSaved); if (row && row.status === 'done') offerShare('done', S.tasks.find(x => x.id === t.id) || row); }, 50);
   });
 }
 async function requestChanges() {
   const t = cur(); const note = ($('#rNote') && $('#rNote').value.trim()) || '';
-  if (!note) { toast('Escreva o que precisa ser ajustado.'); $('#rNote').focus(); return; }
+  if (!note) { toast(T().writeChanges); $('#rNote').focus(); return; }
   await act(async () => {
     await api.updateTask(t.id, { status: 'doing', approvals: {} });
     await api.addComment({ task_id: t.id, author_id: S.me, kind: 'changes', body: note });
-  }, 'Ajustes pedidos. A tarefa voltou para Fazendo.');
+  }, T().changesAsked);
   offerShare('changes', S.tasks.find(x => x.id === t.id) || t, note);
 }
 

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0F2420">
-<title>Meridiano · Quadro</title>
+<title>Meridiano · Board</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F2420'/%3E%3Crect x='11' y='11' width='10' height='10' transform='rotate(45 16 16)' fill='%23C9A94E'/%3E%3C/svg%3E">
 <style>
 @font-face{font-family:'Newsreader';src:url(fonts/Newsreader-normal.woff2) format('woff2');font-weight:200 800;font-display:swap}
@@ -240,7 +240,11 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
 .share .sh-t span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .btn.wa{background:#25D366;border-color:#25D366;color:#06301a;text-decoration:none}
 .btn.wa svg{width:17px;height:17px}
+.login-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.langsw button{padding:4px 10px;font-size:12px;font-weight:700;letter-spacing:.06em}
+.langsw button.on{background:color-mix(in srgb,var(--brass) 20%,transparent);color:var(--brass)}
 @media (max-width:860px){
+  .top-lang{display:none}
   .me{padding:3px;border-color:transparent}.me>span:not(.av){display:none}
   .top-row{gap:6px}
   .wordmark span.eb{display:none}
@@ -278,44 +282,45 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
 <body>
 
 <section id="login" hidden>
-  <div class="wordmark"><i></i><b>Meridiano</b><span class="eb">Quadro</span></div>
+  <div class="login-top"><div class="wordmark"><i></i><b>Meridiano</b><span class="eb">Board</span></div><span class="segs langsw" aria-label="Language"></span></div>
   <div class="login-main">
-    <div class="eb">Equipe</div>
-    <h1>Quem está<br>trabalhando hoje?</h1>
-    <p class="lead">Escolha seu nome para entrar. O quadro lembra de você neste aparelho.</p>
+    <div class="eb" data-i18n="loginEb"></div>
+    <h1 data-i18n="loginH"></h1>
+    <p class="lead" data-i18n="loginLead"></p>
     <div class="people" id="people"></div>
-    <form class="addform" id="addForm" hidden><input class="in" id="addName" placeholder="Seu nome completo" maxlength="80" autocomplete="name"><button class="btn pri" type="submit">Entrar</button></form>
+    <form class="addform" id="addForm" hidden><input class="in" id="addName" data-i18n-ph="yourName" maxlength="80" autocomplete="name"><button class="btn pri" type="submit" data-i18n="enter"></button></form>
   </div>
-  <div class="login-foot">Backlog · A fazer · Fazendo · Revisão · Feito</div>
+  <div class="login-foot">English · Español · Português</div>
 </section>
 
 <section id="app" hidden>
   <header class="top">
     <div class="top-row">
-      <div class="wordmark"><i></i><b>Meridiano</b><span class="eb">Quadro</span></div>
+      <div class="wordmark"><i></i><b>Meridiano</b><span class="eb">Board</span></div>
       <div class="grow"></div>
-      <button class="icon-btn bellb" id="bellBtn" title="Novidades" aria-label="Novidades"></button>
-      <button class="icon-btn" id="themeBtn" title="Tema claro/escuro" aria-label="Alternar tema"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></button>
+      <button class="icon-btn bellb" id="bellBtn" title="What’s new" aria-label="What’s new"></button>
+      <span class="segs langsw top-lang" aria-label="Language"></span>
+      <button class="icon-btn" id="themeBtn" title="Light/dark" aria-label="Light/dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></button>
       <button class="me" id="meBtn"></button>
     </div>
     <div class="title-row">
-      <div><div class="eb" id="today"></div><h1 style="margin-top:8px">Tarefas da equipe</h1></div>
+      <div><div class="eb" id="today"></div><h1 style="margin-top:8px" data-i18n="title"></h1></div>
       <div class="grow"></div>
       <div class="stats" id="stats"></div>
-      <button class="btn pri" id="newTop">+ Nova tarefa</button>
+      <button class="btn pri" id="newTop" data-i18n="newTask"></button>
     </div>
     <div class="toolbar" id="toolbar"></div>
     <nav class="tabs" id="tabs"></nav>
   </header>
   <div class="banner" id="banner" hidden></div>
-  <main class="board" id="board"><div class="loading">Carregando…</div></main>
-  <button class="btn pri fab" id="fab">+ Nova tarefa</button>
+  <main class="board" id="board"><div class="loading">…</div></main>
+  <button class="btn pri fab" id="fab" data-i18n="newTask"></button>
 </section>
 
 <div class="menu" id="menu" hidden></div>
 <div class="share" id="share" hidden role="status"></div>
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-label="Detalhes da tarefa"></aside>
+<aside class="drawer" id="drawer" aria-label="Task"></aside>
 <div class="modal" id="modal"><div class="mbox" id="mbox"></div></div>
 <div id="toast" role="status"></div>
 
