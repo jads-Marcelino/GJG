@@ -6,6 +6,9 @@ Lightweight team kanban: **Backlog → To do → Doing → Review → Done**. Av
 
 ## How it works
 
+The full **usage guide** (EN · ES · PT) is inside the app: the **?** button at the top, or *How it works* on the sign-in screen. It opens automatically the first time someone signs in.
+
+
 - **Sign in:** pick your name on the first screen. The board remembers you on that device.
 - **Owner:** only the task owner moves it between lanes. Everyone else can comment, attach and edit text.
 - **Definition of done:** a checklist on each task. It's only required when moving to **Review** or **Done**, and then every item must be checked. The database enforces this too.
@@ -14,7 +17,9 @@ Lightweight team kanban: **Backlog → To do → Doing → Review → Done**. Av
 - **Timer:** starting it moves the task to Doing. It pauses on its own when the task leaves Doing.
 - **Attachments:** files up to 50 MB (private storage, temporary links) and links (Drive, Figma, Notion).
 - **Notifications:**
-  - The bell shows what changed since your last visit.
+  - The bell shows what concerns you: tasks created for you or handed to you, review requests, approvals and change requests, comments on tasks you're involved in, files, and finished tasks.
+  - `@Full Name` in a comment notifies that person.
+  - Optional device notifications (while the board is open).
   - The **Notify the group** button opens WhatsApp with a ready-made message in your language.
   - `…/jira/#MER-12` opens a task directly.
 

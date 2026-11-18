@@ -129,7 +129,7 @@ const tools = [
   { name: "review_task", description: "A reviewer approves or requests changes. When all approve, the task goes to Done. Requesting changes needs a note and sends the task back to Doing.",
     inputSchema: { type: "object", required: ["person", "task", "decision"], properties: {
       person: P, task: T, decision: { type: "string", enum: ["approve", "request_changes"] }, note: { type: "string" } } } },
-  { name: "add_comment", description: "Add a comment to a task.",
+  { name: "add_comment", description: "Add a comment to a task. Write @Full Name to notify a specific person.",
     inputSchema: { type: "object", required: ["person", "task", "text"], properties: { person: P, task: T, text: { type: "string" } } } },
   { name: "timer", description: "Start or pause the task timer (owner only). Starting moves the task to Doing.",
     inputSchema: { type: "object", required: ["person", "task", "action"], properties: {
@@ -182,7 +182,7 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
     }
 
     case "update_task": {
-      await person(a.person, ms);
+      const who = await person(a.person, ms);
       const t = await task(a.task);
       const patch: Record<string, unknown> = {};
       if (a.title !== undefined) patch.title = String(a.title).trim();
@@ -194,6 +194,8 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       }
       if (!Object.keys(patch).length) throw new UserError("Nothing to change.");
       const u = check(await sb.from("jira_tasks").update(patch).eq("id", t.id).select().single()) as Task;
+      if (patch.owner_id && patch.owner_id !== t.owner_id && patch.owner_id !== who.id)
+        check(await sb.from("jira_comments").insert({ task_id: t.id, author_id: who.id, kind: "assign", body: "", meta: { to: patch.owner_id } }));
       return { updated: summary(u, ms) };
     }
 

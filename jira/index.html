@@ -233,6 +233,23 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
 .menu .nt small{display:block;color:var(--mut2);font-size:12.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .menu .nt.new{background:color-mix(in srgb,var(--brass) 9%,transparent)}
 .menu .nt.new b::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--brass);margin:0 2px 2px 6px;vertical-align:middle}
+.mention{color:var(--brass);font-weight:700}
+.mention-pick{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.mention-pick button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:100px;padding:4px 10px 4px 4px;font-size:13px;font-weight:600}
+.mention-pick button:hover{border-color:var(--brass)}
+.menu #notifBtn{align-items:flex-start;gap:10px}
+.menu #notifBtn svg{width:18px;height:18px;flex:none;color:var(--brass);margin-top:1px}
+.menu #notifBtn small{display:block;color:var(--mut2);font-size:12px;margin-top:2px}
+.kind.assign{color:var(--l-todo);background:color-mix(in srgb,var(--l-todo) 14%,transparent)}
+.mbox.wide{width:min(720px,100%)}
+.guide{margin-top:14px}
+.guide section{padding:14px 0;border-top:1px solid var(--line)}
+.guide section:first-child{border-top:0;padding-top:6px}
+.guide h3{font-family:Newsreader,serif;font-weight:400;font-size:20px;margin-bottom:6px}
+.guide p{color:var(--mut);font-size:14.5px;line-height:1.55}
+.guide b{color:var(--ink)}
+.guide code{font-size:12px;background:var(--panel);padding:2px 6px;border-radius:6px;word-break:break-all}
+.guide-link{color:var(--brass);font-weight:700;text-decoration:none}
 .share{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));z-index:70;transform:translate(-50%,16px);opacity:0;transition:all .2s;display:flex;align-items:center;gap:10px;width:min(560px,calc(100% - 24px));padding:12px 10px 12px 18px;background:var(--card);border:1px solid var(--line2);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .share.on{opacity:1;transform:translate(-50%,0)}
 .share .sh-t{flex:1;min-width:0;font-size:13px;color:var(--mut)}
@@ -290,7 +307,7 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
     <div class="people" id="people"></div>
     <form class="addform" id="addForm" hidden><input class="in" id="addName" data-i18n-ph="yourName" maxlength="80" autocomplete="name"><button class="btn pri" type="submit" data-i18n="enter"></button></form>
   </div>
-  <div class="login-foot">English · Español · Português</div>
+  <div class="login-foot"><a href="#" id="guideLink" class="guide-link"></a> <span class="mut2">· English · Español · Português</span></div>
 </section>
 
 <section id="app" hidden>
@@ -298,6 +315,7 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
     <div class="top-row">
       <div class="wordmark"><i></i><b>Meridiano</b><span class="eb">Board</span></div>
       <div class="grow"></div>
+      <button class="icon-btn" id="guideBtn" title="Guide" aria-label="Guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 014.8.9c0 1.7-2.4 2.2-2.4 3.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg></button>
       <button class="icon-btn bellb" id="bellBtn" title="What’s new" aria-label="What’s new"></button>
       <span class="segs langsw top-lang" aria-label="Language"></span>
       <button class="icon-btn" id="themeBtn" title="Light/dark" aria-label="Light/dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></button>

@@ -20,6 +20,14 @@ const S = { members: [], tasks: [], comments: [], files: [], me: null, filter: '
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function hlMentions(body) {
+  let h = esc(body);
+  [...S.members].sort((a, b) => b.name.length - a.name.length).forEach(m => {
+    const re = new RegExp('@' + esc(m.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    h = h.replace(re, x => `<b class="mention">${x}</b>`);
+  });
+  return h;
+}
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'x' + Math.random().toString(16).slice(2) + Date.now().toString(16));
 const ts = v => (v ? Date.parse(v) : 0);
 const store = { get(k) { try { return localStorage.getItem(k) } catch (_) { return null } }, set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch (_) {} } };
@@ -72,7 +80,7 @@ const I18N = {
     pause: 'Pause', resume: 'Resume', start: 'Start', countingSince: tm => `Running since ${tm}. Pauses on its own when the task leaves Doing.`, timerHint: 'Starting the timer moves the task to Doing.',
     validated: 'Validated', awaiting: 'Waiting for validation', approved: a => `✓ Approved · ${a}`, pending: 'Pending',
     rNotePh: 'Comment (required to request changes)', approve: 'Approve', requestChanges: 'Request changes', takeOut: 'Take out of review',
-    kinds: { review: 'requested review', approve: 'approved', changes: 'requested changes' }, noComments: 'No comments yet.',
+    kinds: { review: 'requested review', approve: 'approved', changes: 'requested changes', assign: 'reassigned' }, noComments: 'No comments yet.',
     updated: a => `Updated ${a}`, del: 'Delete', delConfirm: c => `Delete ${c} for good?`, deleted: c => `${c} deleted`,
     link: 'Link', removeAtt: 'Remove attachment', noAtt: 'No attachments.', attRemoved: 'Attachment removed',
     titleEmpty: 'The title can’t be empty.', saved: 'Saved', timerStarted: 'Timer started', timerPaused: 'Timer paused',
@@ -86,7 +94,10 @@ const I18N = {
     shareBtn: 'Notify the group', copy: 'Copy', copied: 'Message copied.', copyFail: 'Couldn’t copy.',
     news: 'What’s new', nothingNew: 'Nothing new here.',
     evCreated: (c, forYou) => `created ${c}${forYou ? ' for you' : ''}`, evReview: c => `asked for your review on ${c}`, evChanges: c => `requested changes on ${c}`,
-    evApprove: c => `approved ${c}`, evComment: c => `commented on ${c}`,
+    evApprove: c => `approved ${c}`, evComment: c => `commented on ${c}`, evMention: c => `mentioned you on ${c}`, evAssign: c => `assigned ${c} to you`,
+    evFile: c => `attached a file to ${c}`, evDone: c => `finished ${c}`, assignedTo: n => `assigned to ${n}`,
+    notifOn: 'Device notifications on', notifEnable: 'Turn on device notifications', notifBlocked: 'Notifications are blocked in this browser’s settings.',
+    notifHint: 'Shown while the board is open, even in the background.', mentionHint: 'Type @ to mention someone — they’ll be notified.', notifTitle: 'Meridiano · Board',
     err: { dod: 'Complete the definition of done first.', reviewAll: 'In review, the task only goes to Done when all reviewers approve.', notInReview: 'The task is not in review.', notReviewer: 'You are not a reviewer of this task.', exists: 'That name already exists.' },
   },
   es: {
@@ -123,7 +134,7 @@ const I18N = {
     pause: 'Pausar', resume: 'Reanudar', start: 'Iniciar', countingSince: tm => `Contando desde las ${tm}. Se pausa solo al salir de En curso.`, timerHint: 'Iniciar el cronómetro mueve la tarea a En curso.',
     validated: 'Validada', awaiting: 'Esperando validación', approved: a => `✓ Aprobó · ${a}`, pending: 'Pendiente',
     rNotePh: 'Comentario (obligatorio para pedir cambios)', approve: 'Aprobar', requestChanges: 'Pedir cambios', takeOut: 'Sacar de revisión',
-    kinds: { review: 'pidió revisión', approve: 'aprobó', changes: 'pidió cambios' }, noComments: 'Sin comentarios.',
+    kinds: { review: 'pidió revisión', approve: 'aprobó', changes: 'pidió cambios', assign: 'reasignó' }, noComments: 'Sin comentarios.',
     updated: a => `Actualizada ${a}`, del: 'Eliminar', delConfirm: c => `¿Eliminar ${c} definitivamente?`, deleted: c => `${c} eliminada`,
     link: 'Enlace', removeAtt: 'Quitar adjunto', noAtt: 'Sin adjuntos.', attRemoved: 'Adjunto quitado',
     titleEmpty: 'El título no puede quedar vacío.', saved: 'Guardado', timerStarted: 'Cronómetro iniciado', timerPaused: 'Cronómetro pausado',
@@ -137,7 +148,10 @@ const I18N = {
     shareBtn: 'Avisar al grupo', copy: 'Copiar', copied: 'Mensaje copiado.', copyFail: 'No pude copiar.',
     news: 'Novedades', nothingNew: 'Nada nuevo por aquí.',
     evCreated: (c, forYou) => `creó ${c}${forYou ? ' para ti' : ''}`, evReview: c => `pidió tu revisión en ${c}`, evChanges: c => `pidió cambios en ${c}`,
-    evApprove: c => `aprobó ${c}`, evComment: c => `comentó en ${c}`,
+    evApprove: c => `aprobó ${c}`, evComment: c => `comentó en ${c}`, evMention: c => `te mencionó en ${c}`, evAssign: c => `te asignó ${c}`,
+    evFile: c => `adjuntó un archivo en ${c}`, evDone: c => `terminó ${c}`, assignedTo: n => `asignó a ${n}`,
+    notifOn: 'Notificaciones del dispositivo activadas', notifEnable: 'Activar notificaciones del dispositivo', notifBlocked: 'Las notificaciones están bloqueadas en la configuración del navegador.',
+    notifHint: 'Aparecen mientras el tablero está abierto, incluso en segundo plano.', mentionHint: 'Escribe @ para mencionar a alguien: recibirá un aviso.', notifTitle: 'Meridiano · Tablero',
     err: { dod: 'Completa primero la definición de terminado.', reviewAll: 'En revisión, la tarea solo pasa a Hecho cuando todos los revisores aprueban.', notInReview: 'La tarea no está en revisión.', notReviewer: 'No eres revisor de esta tarea.', exists: 'Ese nombre ya existe.' },
   },
   pt: {
@@ -174,7 +188,7 @@ const I18N = {
     pause: 'Pausar', resume: 'Retomar', start: 'Iniciar', countingSince: tm => `Contando desde ${tm}. Pausa sozinho ao sair de Fazendo.`, timerHint: 'Iniciar o cronômetro move a tarefa para Fazendo.',
     validated: 'Validada', awaiting: 'Aguardando validação', approved: a => `✓ Aprovou · ${a}`, pending: 'Pendente',
     rNotePh: 'Comentário (obrigatório para pedir ajustes)', approve: 'Aprovar', requestChanges: 'Pedir ajustes', takeOut: 'Retirar da revisão',
-    kinds: { review: 'pediu revisão', approve: 'aprovou', changes: 'pediu ajustes' }, noComments: 'Sem comentários.',
+    kinds: { review: 'pediu revisão', approve: 'aprovou', changes: 'pediu ajustes', assign: 'trocou o responsável' }, noComments: 'Sem comentários.',
     updated: a => `Atualizada ${a}`, del: 'Excluir', delConfirm: c => `Excluir ${c} de vez?`, deleted: c => `${c} excluída`,
     link: 'Link', removeAtt: 'Remover anexo', noAtt: 'Nenhum anexo.', attRemoved: 'Anexo removido',
     titleEmpty: 'O título não pode ficar vazio.', saved: 'Salvo', timerStarted: 'Cronômetro iniciado', timerPaused: 'Cronômetro pausado',
@@ -188,7 +202,10 @@ const I18N = {
     shareBtn: 'Avisar no grupo', copy: 'Copiar', copied: 'Mensagem copiada.', copyFail: 'Não consegui copiar.',
     news: 'Novidades', nothingNew: 'Nada novo por aqui.',
     evCreated: (c, forYou) => `criou ${c}${forYou ? ' para você' : ''}`, evReview: c => `pediu sua revisão em ${c}`, evChanges: c => `pediu ajustes em ${c}`,
-    evApprove: c => `aprovou ${c}`, evComment: c => `comentou em ${c}`,
+    evApprove: c => `aprovou ${c}`, evComment: c => `comentou em ${c}`, evMention: c => `mencionou você em ${c}`, evAssign: c => `passou ${c} para você`,
+    evFile: c => `anexou um arquivo em ${c}`, evDone: c => `concluiu ${c}`, assignedTo: n => `passou para ${n}`,
+    notifOn: 'Notificações do aparelho ativadas', notifEnable: 'Ativar notificações do aparelho', notifBlocked: 'As notificações estão bloqueadas nas configurações do navegador.',
+    notifHint: 'Aparecem enquanto o quadro está aberto, mesmo em segundo plano.', mentionHint: 'Digite @ para mencionar alguém: a pessoa recebe um aviso.', notifTitle: 'Meridiano · Quadro',
     err: { dod: 'Complete antes a definição de pronto.', reviewAll: 'Em revisão, a tarefa só vai para Feito quando todos os revisores aprovarem.', notInReview: 'A tarefa não está em revisão.', notReviewer: 'Você não é revisor desta tarefa.', exists: 'Esse nome já existe.' },
   },
 };
@@ -212,6 +229,8 @@ function setLang(l) {
   $$('.langsw').forEach(sw => { sw.innerHTML = LANG_KEYS.map(k => `<button type="button" class="${k === LANG ? 'on' : ''}" data-lang="${k}">${k.toUpperCase()}</button>`).join(''); });
   const tb = $('#toolbar'); if (tb) delete tb.dataset.built;
   $('#menu').hidden = true;
+  if ($('#guideLink')) $('#guideLink').textContent = GUIDE[LANG].open + ' →';
+  if ($('#modal').classList.contains('on') && $('#mbox').classList.contains('wide')) openGuide();
   if (S.loaded || $('#login').hidden === false) route();
   if (S.openId && !dirty()) openDrawer(S.openId);
 }
@@ -397,32 +416,85 @@ function offerShare(kind, t, extra) {
 }
 const seenKey = () => 'jira.seen.' + S.me;
 function lastSeen() { const v = Number(store.get(seenKey())); if (v) return v; const d = Date.now() - 864e5; store.set(seenKey(), d); return d; }
-function events() {
-  const ev = [], me = S.me, week = Date.now() - 14 * 864e5;
-  const tk = id => S.tasks.find(t => t.id === id);
-  S.tasks.forEach(t => { if (t.created_by && t.created_by !== me && ts(t.created_at) > week)
-    ev.push({ at: ts(t.created_at), t, who: t.created_by, text: T().evCreated(code(t), t.owner_id === me), strong: t.owner_id === me }); });
-  S.comments.forEach(c => {
-    const t = tk(c.task_id); if (!t || c.author_id === me || ts(c.created_at) < week) return;
-    const mine = t.owner_id === me;
-    if (c.kind === 'review' && c.meta && (c.meta.to || []).includes(me)) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evReview(code(t)), strong: true });
-    else if (c.kind === 'changes' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evChanges(code(t)), strong: true });
-    else if (c.kind === 'approve' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evApprove(code(t)) });
-    else if (c.kind === 'comment' && (mine || (t.reviewers || []).includes(me))) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: T().evComment(code(t)) });
+const normTxt = x => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function mentions(body) {
+  const b = normTxt(body), out = new Set();
+  if (!b.includes('@')) return out;
+  S.members.forEach(m => {
+    const full = normTxt(m.name), f = full.split(' ')[0];
+    const uniqueFirst = !S.members.some(o => o.id !== m.id && normTxt(o.name).split(' ')[0] === f);
+    if (b.includes('@' + full) || (uniqueFirst && new RegExp('@' + f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])').test(b))) out.add(m.id);
   });
-  return ev.sort((a, b) => b.at - a.at).slice(0, 40);
+  return out;
+}
+function involved(t) {
+  const s2 = new Set([t.owner_id, t.created_by, ...(t.reviewers || [])]);
+  commentsOf(t.id).forEach(c => s2.add(c.author_id));
+  s2.delete(null); s2.delete(undefined); return s2;
+}
+function events() {
+  const ev = [], me = S.me, since = Date.now() - 14 * 864e5, L = T();
+  const tk = id => S.tasks.find(t => t.id === id);
+  const push = (at, t, who, text) => { if (at > since && who !== me) ev.push({ at, t, who, text }); };
+  S.tasks.forEach(t => {
+    if (t.created_by) push(ts(t.created_at), t, t.created_by, L.evCreated(code(t), t.owner_id === me));
+    if (t.status === 'done' && t.done_at && t.owner_id && t.owner_id !== me && (t.created_by === me || (t.reviewers || []).includes(me)))
+      push(ts(t.done_at), t, t.owner_id, L.evDone(code(t)));
+  });
+  S.comments.forEach(c => {
+    const t = tk(c.task_id); if (!t) return;
+    const at = ts(c.created_at), mine = t.owner_id === me || t.created_by === me;
+    if (c.kind === 'review' && c.meta && (c.meta.to || []).includes(me)) push(at, t, c.author_id, L.evReview(code(t)));
+    else if (c.kind === 'assign' && c.meta && c.meta.to === me) push(at, t, c.author_id, L.evAssign(code(t)));
+    else if (c.kind === 'changes' && mine) push(at, t, c.author_id, L.evChanges(code(t)));
+    else if (c.kind === 'approve' && mine) push(at, t, c.author_id, L.evApprove(code(t)));
+    else if (c.kind === 'comment') {
+      if (mentions(c.body).has(me)) push(at, t, c.author_id, L.evMention(code(t)));
+      else if (involved(t).has(me)) push(at, t, c.author_id, L.evComment(code(t)));
+    }
+  });
+  S.files.forEach(f => { const t = tk(f.task_id); if (t && (t.owner_id === me || t.created_by === me)) push(ts(f.created_at), t, f.uploaded_by, L.evFile(code(t))); });
+  return ev.sort((a, b) => b.at - a.at).slice(0, 50);
+}
+/* device notifications (opt-in) */
+const notifKey = () => 'jira.notified.' + S.me;
+function notifyDevice() {
+  const ev = events(), n = ev.filter(e => e.at > lastSeen()).length;
+  document.title = (n ? `(${n}) ` : '') + 'Meridiano';
+  if (!('Notification' in window) || Notification.permission !== 'granted' || store.get('jira.notif') !== '1') return;
+  let last = Number(store.get(notifKey()));
+  if (!last) { store.set(notifKey(), Date.now()); return; }
+  const fresh = ev.filter(e => e.at > last).reverse().slice(-4);
+  fresh.forEach(e => {
+    try {
+      const nt = new Notification(`${first(e.who)} ${e.text}`, { body: e.t.title, tag: 'jira-' + e.t.id + '-' + e.at });
+      nt.onclick = () => { window.focus(); openDrawer(e.t.id); nt.close(); };
+    } catch (_) {}
+  });
+  if (ev.length) store.set(notifKey(), Math.max(last, ev[0].at));
+}
+async function enableNotif() {
+  if (!('Notification' in window)) { toast(T().notifBlocked); return; }
+  const p = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission;
+  if (p === 'granted') { store.set('jira.notif', '1'); store.set(notifKey(), Date.now()); toast(T().notifOn); }
+  else toast(T().notifBlocked);
+  openBell();
 }
 function renderBell() {
   const n = events().filter(e => e.at > lastSeen()).length;
   $('#bellBtn').innerHTML = IC.bell + (n ? `<span class="dot">${n > 9 ? '9+' : n}</span>` : '');
+  notifyDevice();
 }
 function openBell() {
   const ev = events(), seen = lastSeen(), m = $('#menu');
+  const nOn = 'Notification' in window && Notification.permission === 'granted' && store.get('jira.notif') === '1';
   m.innerHTML = `<div style="padding:10px 12px 6px"><div class="eb" style="color:var(--mut2)">${T().news}</div></div>` +
     (ev.length ? ev.map((e, i) => `<button class="nt ${e.at > seen ? 'new' : ''}" data-ev="${i}">${av(e.who)}<span><b>${esc(first(e.who))}</b> ${esc(e.text)}<small>${esc(e.t.title)} · ${ago(new Date(e.at).toISOString())}</small></span></button>`).join('')
-      : `<div class="mut2 sm" style="padding:6px 12px 14px">${T().nothingNew}</div>`);
+      : `<div class="mut2 sm" style="padding:6px 12px 14px">${T().nothingNew}</div>`) +
+    `<hr>${nOn ? `<div class="mut2 sm" style="padding:8px 12px">✓ ${T().notifOn}</div>` : `<button id="notifBtn">${IC.bell}<span>${T().notifEnable}<small>${T().notifHint}</small></span></button>`}`;
   m.classList.add('bell'); m.hidden = false;
   $$('[data-ev]', m).forEach(b => b.onclick = () => { m.hidden = true; openDrawer(ev[b.dataset.ev].t.id); });
+  if ($('#notifBtn')) $('#notifBtn').onclick = e => { e.stopPropagation(); enableNotif(); };
   store.set(seenKey(), Date.now()); renderBell();
 }
 function openFromHash() {
@@ -432,6 +504,58 @@ function openFromHash() {
   if (t && S.openId !== t.id) { S.lane = t.status; renderBoard(); openDrawer(t.id); }
 }
 window.addEventListener('hashchange', openFromHash);
+
+/* ---------------- usage guide (EN · ES · PT) ---------------- */
+const GUIDE = {
+  en: { eb: 'Guide', h: 'How we use the board', lead: 'The same rules apply in the app, in the database and for Claude/ChatGPT. When in doubt, check here.', ok: 'Got it', open: 'How it works', s: [
+    ['1. Sign in', 'Pick your name on the first screen. The board remembers you on this device. To switch person or language, tap your name at the top right.'],
+    ['2. Create a task', 'Use <b>+ New task</b>. Only the <b>title</b> is required. Add a description, priority (High, Medium, Low), owner and attachments. The definition of done can come later. Every task gets a code (MER-12) and a direct link.'],
+    ['3. Lanes', '<b>Backlog</b>: ideas and requests not planned yet.<br><b>To do</b>: planned, nobody working on it.<br><b>Doing</b>: someone is working on it now.<br><b>Review</b>: waiting for validation.<br><b>Done</b>: finished.'],
+    ['4. Who moves a task', 'Only the <b>owner</b> moves their task between lanes. Everyone else can comment, attach and edit the text. A task with no owner can be taken by anyone. When you hand a task to someone, they are notified.'],
+    ['5. Definition of done', 'A checklist of objective criteria that say when the task is finished (e.g. “client approved the scope”, “final file attached”). It is <b>only required</b> to move to <b>Review</b> or <b>Done</b>, and then <b>every item must be checked</b>. During review it is locked.'],
+    ['6. Review (optional)', 'If the task needs validation, the owner sends it to <b>Review</b> and picks one or more reviewers (never themselves). Each reviewer <b>approves</b> or <b>requests changes</b> (a comment is required, and the task goes back to Doing). When <b>everyone approves</b>, the task moves to Done on its own. While in review, the owner can only take it back out.'],
+    ['7. Finish without review', 'If no validation is needed, the owner moves the task straight to <b>Done</b>, as long as the definition of done is complete.'],
+    ['8. Timer', '<b>Start</b> on the task to count time. Starting moves the task to Doing. It pauses on its own when the task leaves Doing. The total shows on the card.'],
+    ['9. Notifications', 'The <b>bell</b> shows what concerns you:<br>• tasks created for you or handed to you<br>• review requests<br>• approvals and change requests on your tasks<br>• comments on tasks you own, created, review or commented on<br>• files attached to your tasks<br>• tasks you created or reviewed that were finished<br>Type <b>@name</b> in a comment to notify anyone. Turn on <b>device notifications</b> in the bell. After creating, sending to review, requesting changes or finishing, the <b>Notify the group</b> button sends the message to WhatsApp.'],
+    ['10. Good practices', '• One owner per task.<br>• A definition of done that anyone can check.<br>• Use High priority sparingly.<br>• Discuss the task in its comments, not only on WhatsApp, so the history stays in one place.<br>• Close what is finished. Move what is stuck back to To do.'],
+    ['11. Claude and ChatGPT', 'Connect the MCP server <code>https://oqokqkrczmdnhfwiwwdv.supabase.co/functions/v1/jira-mcp</code> as a custom connector. Then ask in any language, saying who you are: “I’m Jeny, create a high-priority task…”. The same rules apply.'],
+  ] },
+  es: { eb: 'Guía', h: 'Cómo usamos el tablero', lead: 'Las mismas reglas valen en la app, en la base de datos y para Claude/ChatGPT. Ante cualquier duda, consulta aquí.', ok: 'Entendido', open: 'Cómo funciona', s: [
+    ['1. Entrar', 'Elige tu nombre en la primera pantalla. El tablero te recuerda en este dispositivo. Para cambiar de persona o de idioma, toca tu nombre arriba a la derecha.'],
+    ['2. Crear una tarea', 'Usa <b>+ Nueva tarea</b>. Solo el <b>título</b> es obligatorio. Agrega descripción, prioridad (Alta, Media, Baja), responsable y adjuntos. La definición de terminado puede venir después. Cada tarea recibe un código (MER-12) y un enlace directo.'],
+    ['3. Columnas', '<b>Backlog</b>: ideas y pedidos aún no planificados.<br><b>Por hacer</b>: planificada, nadie trabajando.<br><b>En curso</b>: alguien está trabajando en ella.<br><b>Revisión</b>: esperando validación.<br><b>Hecho</b>: terminada.'],
+    ['4. Quién mueve una tarea', 'Solo el <b>responsable</b> mueve su tarea entre columnas. Los demás pueden comentar, adjuntar y editar el texto. Una tarea sin responsable la puede tomar cualquiera. Al pasarle una tarea a alguien, esa persona recibe un aviso.'],
+    ['5. Definición de terminado', 'Lista de criterios objetivos que indican cuándo la tarea está terminada (ej.: “el cliente aprobó el alcance”, “archivo final adjunto”). <b>Solo se exige</b> para mover a <b>Revisión</b> o <b>Hecho</b>, y entonces <b>todos los ítems deben estar marcados</b>. Durante la revisión queda bloqueada.'],
+    ['6. Revisión (opcional)', 'Si la tarea necesita validación, el responsable la envía a <b>Revisión</b> y elige uno o más revisores (nunca a sí mismo). Cada revisor <b>aprueba</b> o <b>pide cambios</b> (con comentario obligatorio; la tarea vuelve a En curso). Cuando <b>todos aprueban</b>, la tarea pasa sola a Hecho. En revisión, el responsable solo puede sacarla de revisión.'],
+    ['7. Terminar sin revisión', 'Si no necesita validación, el responsable mueve la tarea directo a <b>Hecho</b>, siempre que la definición de terminado esté completa.'],
+    ['8. Cronómetro', '<b>Iniciar</b> en la tarea cuenta el tiempo. Iniciar mueve la tarea a En curso. Se pausa solo cuando la tarea sale de En curso. El total aparece en la tarjeta.'],
+    ['9. Avisos', 'La <b>campana</b> muestra lo que te concierne:<br>• tareas creadas o pasadas a ti<br>• pedidos de revisión<br>• aprobaciones y pedidos de cambios en tus tareas<br>• comentarios en tareas de las que eres responsable, que creaste, revisas o comentaste<br>• archivos adjuntos en tus tareas<br>• tareas que creaste o revisaste y se terminaron<br>Escribe <b>@nombre</b> en un comentario para avisar a cualquiera. Activa las <b>notificaciones del dispositivo</b> en la campana. Después de crear, enviar a revisión, pedir cambios o terminar, el botón <b>Avisar al grupo</b> envía el mensaje a WhatsApp.'],
+    ['10. Buenas prácticas', '• Un responsable por tarea.<br>• Una definición de terminado que cualquiera pueda verificar.<br>• Usa la prioridad Alta con moderación.<br>• Conversa en los comentarios de la tarea, no solo en WhatsApp, para mantener el historial en un solo lugar.<br>• Cierra lo que terminó. Lo que está trabado vuelve a Por hacer.'],
+    ['11. Claude y ChatGPT', 'Conecta el servidor MCP <code>https://oqokqkrczmdnhfwiwwdv.supabase.co/functions/v1/jira-mcp</code> como conector personalizado. Luego pide en cualquier idioma, diciendo quién eres: “Soy Jeny, crea una tarea de prioridad alta…”. Valen las mismas reglas.'],
+  ] },
+  pt: { eb: 'Guia', h: 'Como usamos o quadro', lead: 'As mesmas regras valem no app, no banco de dados e para o Claude/ChatGPT. Na dúvida, consulte aqui.', ok: 'Entendi', open: 'Como funciona', s: [
+    ['1. Entrar', 'Escolha seu nome na primeira tela. O quadro lembra de você neste aparelho. Para trocar de pessoa ou de idioma, toque no seu nome no canto superior direito.'],
+    ['2. Criar uma tarefa', 'Use <b>+ Nova tarefa</b>. Só o <b>título</b> é obrigatório. Adicione descrição, prioridade (Alta, Média, Baixa), responsável e anexos. A definição de pronto pode vir depois. Cada tarefa ganha um código (MER-12) e um link direto.'],
+    ['3. Raias', '<b>Backlog</b>: ideias e pedidos ainda não planejados.<br><b>A fazer</b>: planejada, ninguém trabalhando.<br><b>Fazendo</b>: alguém está trabalhando nela agora.<br><b>Revisão</b>: aguardando validação.<br><b>Feito</b>: concluída.'],
+    ['4. Quem move a tarefa', 'Só o <b>responsável</b> move a própria tarefa entre as raias. Os demais podem comentar, anexar e editar o texto. Tarefa sem responsável pode ser assumida por qualquer um. Ao passar uma tarefa para alguém, a pessoa é avisada.'],
+    ['5. Definição de pronto', 'Lista de critérios objetivos que dizem quando a tarefa está concluída (ex.: “cliente aprovou o escopo”, “arquivo final anexado”). <b>Só é cobrada</b> para mover para <b>Revisão</b> ou <b>Feito</b>, e aí <b>todos os itens precisam estar marcados</b>. Durante a revisão fica travada.'],
+    ['6. Revisão (opcional)', 'Se a tarefa precisa de validação, o responsável envia para <b>Revisão</b> e escolhe um ou mais revisores (nunca ele mesmo). Cada revisor <b>aprova</b> ou <b>pede ajustes</b> (com comentário obrigatório; a tarefa volta para Fazendo). Quando <b>todos aprovam</b>, a tarefa vai sozinha para Feito. Em revisão, o responsável só pode retirá-la da revisão.'],
+    ['7. Concluir sem revisão', 'Se não precisa de validação, o responsável move a tarefa direto para <b>Feito</b>, desde que a definição de pronto esteja completa.'],
+    ['8. Cronômetro', '<b>Iniciar</b>, na tarefa, conta o tempo. Iniciar move a tarefa para Fazendo. Pausa sozinho quando a tarefa sai de Fazendo. O total aparece no cartão.'],
+    ['9. Avisos', 'O <b>sininho</b> mostra o que é com você:<br>• tarefas criadas ou passadas para você<br>• pedidos de revisão<br>• aprovações e pedidos de ajuste nas suas tarefas<br>• comentários em tarefas que você é responsável, criou, revisa ou comentou<br>• arquivos anexados às suas tarefas<br>• tarefas que você criou ou revisou e foram concluídas<br>Escreva <b>@nome</b> num comentário para avisar qualquer pessoa. Ative as <b>notificações do aparelho</b> no sininho. Depois de criar, enviar para revisão, pedir ajustes ou concluir, o botão <b>Avisar no grupo</b> manda a mensagem pelo WhatsApp.'],
+    ['10. Boas práticas', '• Um responsável por tarefa.<br>• Uma definição de pronto que qualquer um consiga conferir.<br>• Use a prioridade Alta com moderação.<br>• Converse nos comentários da tarefa, não só no WhatsApp, para o histórico ficar num lugar só.<br>• Feche o que terminou. O que travou volta para A fazer.'],
+    ['11. Claude e ChatGPT', 'Conecte o servidor MCP <code>https://oqokqkrczmdnhfwiwwdv.supabase.co/functions/v1/jira-mcp</code> como conector personalizado. Depois é só pedir em qualquer idioma, dizendo quem você é: “Sou a Jeny, crie uma tarefa de prioridade alta…”. Valem as mesmas regras.'],
+  ] },
+};
+function openGuide() {
+  const g = GUIDE[LANG];
+  openModal(`<div class="eb">${g.eb}</div><h2 style="margin-top:6px">${g.h}</h2><p class="mut">${g.lead}</p>
+    <div class="guide">${g.s.map(([h, b]) => `<section><h3>${h}</h3><p>${b}</p></section>`).join('')}</div>
+    <div class="mfoot"><button class="btn pri" id="gOk">${g.ok}</button></div>`);
+  $('#mbox').classList.add('wide'); $('#mbox').scrollTop = 0;
+  $('#gOk').onclick = closeModal;
+  store.set('jira.guideSeen', '1');
+}
 
 /* ---------------- login ---------------- */
 function renderLogin() {
@@ -450,7 +574,7 @@ $('#addForm').onsubmit = async e => {
   if (ex) { login(ex.id); return; }
   try { const m = await api.addMember(name); await reload(); login(m.id); } catch (err) { toast(errMsg(err)); }
 };
-function login(id) { S.me = id; store.set('jira.me', id); S.filter = 'all'; route(); toast(T().hello(first(id))); }
+function login(id) { S.me = id; store.set('jira.me', id); S.filter = 'all'; route(); toast(T().hello(first(id))); if (!store.get('jira.guideSeen')) setTimeout(openGuide, 400); }
 function logout() { S.me = null; store.set('jira.me', null); closeDrawer(true); route(); }
 
 /* ---------------- board ---------------- */
@@ -528,14 +652,17 @@ document.addEventListener('click', e => {
 $('#newTop').onclick = () => openNew();
 $('#fab').onclick = () => openNew();
 $('#bellBtn').onclick = e => { e.stopPropagation(); const m = $('#menu'); if (!m.hidden && m.classList.contains('bell')) { m.hidden = true; return; } openBell(); };
+$('#guideBtn').onclick = () => openGuide();
+$('#guideLink').onclick = e => { e.preventDefault(); openGuide(); };
 $('#themeBtn').onclick = () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
 $('#meBtn').onclick = () => {
   const m = $('#menu'); m.classList.remove('bell');
   m.innerHTML = `<div style="padding:10px 12px 8px"><div class="eb" style="color:var(--mut2)">${T().signedAs}</div><div class="serif" style="font-size:20px;margin-top:4px">${esc(nm(S.me))}</div></div><hr>
-    <button id="mSwitch">${T().switchPerson}</button><button id="mTheme">${T().toggleTheme}</button><hr><div style="display:flex;align-items:center;gap:10px;padding:6px 12px 8px"><span class="mut2 sm" style="flex:1">${T().lang}</span><span class="segs langsw sm"></span></div>`;
+    <button id="mGuide">${GUIDE[LANG].open}</button><button id="mSwitch">${T().switchPerson}</button><button id="mTheme">${T().toggleTheme}</button><hr><div style="display:flex;align-items:center;gap:10px;padding:6px 12px 8px"><span class="mut2 sm" style="flex:1">${T().lang}</span><span class="segs langsw sm"></span></div>`;
   $$('.langsw', m).forEach(sw => { sw.innerHTML = LANG_KEYS.map(k => `<button type="button" class="${k === LANG ? 'on' : ''}" data-lang="${k}">${k.toUpperCase()}</button>`).join(''); });
   m.hidden = !m.hidden;
   $('#mSwitch').onclick = () => { m.hidden = true; logout(); };
+  $('#mGuide').onclick = () => { m.hidden = true; openGuide(); };
   $('#mTheme').onclick = () => { m.hidden = true; $('#themeBtn').click(); };
 };
 $('#scrim').onclick = () => closeDrawer();
@@ -567,7 +694,7 @@ async function moveTask(t, to) {
 }
 
 /* ---------------- modal ---------------- */
-function openModal(html) { $('#mbox').innerHTML = html; $('#modal').classList.add('on'); }
+function openModal(html) { $('#mbox').classList.remove('wide'); $('#mbox').innerHTML = html; $('#modal').classList.add('on'); }
 function closeModal() { $('#modal').classList.remove('on'); }
 const memberOpts = sel => `<option value="">${T().noOwner}</option>` + S.members.map(m => `<option value="${esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}${m.id === S.me ? ` (${T().you})` : ''}</option>`).join('');
 
@@ -653,7 +780,8 @@ function openDrawer(id) {
       <div class="linkrow" id="dLinkRow" hidden><input class="in" id="dUrl" type="url" placeholder="${L.linkPh}"><button class="btn pri sm" id="dLinkAdd">${L.add}</button></div>
       <div class="hint" id="dUpMsg"></div></div>
     <div class="sec"><div class="lb">${L.activity}</div><div id="dComments"></div>
-      <div class="cbox"><textarea class="in" id="dCText" rows="2" placeholder="${L.commentPh}"></textarea><button class="btn pri" id="dCSend">${L.send}</button></div></div>
+      <div class="mention-pick" id="dMention" hidden></div>
+      <div class="cbox"><textarea class="in" id="dCText" rows="2" placeholder="${L.commentPh}"></textarea><button class="btn pri" id="dCSend">${L.send}</button></div><div class="hint">${L.mentionHint}</div></div>
     <div class="dfoot" id="dFoot"></div>
   </div>`;
   $('#scrim').classList.add('on'); d.classList.add('on');
@@ -665,7 +793,10 @@ function openDrawer(id) {
   $('#dClose').onclick = () => closeDrawer();
   $('#dSaveBtn').onclick = saveText;
   $('#dDiscard').onclick = () => { ti.value = base.title; de.value = base.desc; onEdit(); };
-  $('#dOwner').onchange = e => act(() => api.updateTask(S.openId, { owner_id: e.target.value || null }));
+  $('#dOwner').onchange = e => { const to = e.target.value || null, id = S.openId; act(async () => {
+    await api.updateTask(id, { owner_id: to });
+    if (to && to !== S.me) await api.addComment({ task_id: id, author_id: S.me, kind: 'assign', body: '', meta: { to } });
+  }); };
   $('#dPri').onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return; const t = cur(); if (t.priority !== b.dataset.p) act(() => api.updateTask(t.id, { priority: b.dataset.p })); };
   $('#dTimerBtn').onclick = toggleTimer;
   $('#dodAddBtn').onclick = addDod;
@@ -675,6 +806,19 @@ function openDrawer(id) {
   $('#dLinkAdd').onclick = addLink;
   $('#dUrl').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addLink(); } };
   $('#dCSend').onclick = sendComment;
+  const ct = $('#dCText');
+  ct.oninput = () => {
+    const v = ct.value.slice(0, ct.selectionStart), mm = v.match(/@([^\s@]*)$/), box = $('#dMention');
+    if (!mm) { box.hidden = true; return; }
+    const q = normTxt(mm[1]);
+    const list = S.members.filter(x => normTxt(x.name).includes(q)).slice(0, 6);
+    box.innerHTML = list.map(x => `<button type="button" data-mention="${esc(x.id)}">${av(x.id, 'xs')}${esc(x.name)}</button>`).join('');
+    box.hidden = !list.length;
+    $$('[data-mention]', box).forEach(b => b.onclick = () => {
+      const x = member(b.dataset.mention), pos = ct.selectionStart, before = ct.value.slice(0, pos).replace(/@([^\s@]*)$/, '@' + x.name + ' ');
+      ct.value = before + ct.value.slice(pos); ct.focus(); ct.selectionStart = ct.selectionEnd = before.length; box.hidden = true;
+    });
+  };
   fillDrawer(); fit();
 }
 const cur = () => S.tasks.find(t => t.id === S.openId);
@@ -737,7 +881,7 @@ function fillDrawer() {
   // comments
   const kinds = L.kinds;
   const cms = commentsOf(t.id);
-  $('#dComments').innerHTML = cms.length ? cms.map(c => `<div class="cm">${av(c.author_id)}<div class="b"><div class="h"><b>${esc(first(c.author_id))}</b>${kinds[c.kind] ? `<span class="kind ${c.kind}">${kinds[c.kind]}${c.kind === 'review' && c.meta && c.meta.to ? ' · ' + esc(c.meta.to.map(first).join(', ')) : ''}</span>` : ''} · ${ago(c.created_at)}</div>${c.body ? `<div class="t">${esc(c.body)}</div>` : ''}</div></div>`).join('')
+  $('#dComments').innerHTML = cms.length ? cms.map(c => `<div class="cm">${av(c.author_id)}<div class="b"><div class="h"><b>${esc(first(c.author_id))}</b>${kinds[c.kind] ? `<span class="kind ${c.kind}">${kinds[c.kind]}${c.kind === 'review' && c.meta && c.meta.to ? ' · ' + esc(c.meta.to.map(first).join(', ')) : ''}${c.kind === 'assign' && c.meta && c.meta.to ? ' · ' + esc(first(c.meta.to)) : ''}</span>` : ''} · ${ago(c.created_at)}</div>${c.body ? `<div class="t">${hlMentions(c.body)}</div>` : ''}</div></div>`).join('')
     : `<div class="mut2 sm">${L.noComments}</div>`;
   // footer
   const ft = $('#dFoot');
@@ -798,7 +942,7 @@ async function addLink() {
 }
 async function sendComment() {
   const el = $('#dCText'), body = el.value.trim(); if (!body) return;
-  if (await act(() => api.addComment({ task_id: S.openId, author_id: S.me, kind: 'comment', body }))) el.value = '';
+  if (await act(() => api.addComment({ task_id: S.openId, author_id: S.me, kind: 'comment', body }))) { el.value = ''; $('#dMention').hidden = true; }
 }
 async function approve() {
   const t = cur(); const note = ($('#rNote') && $('#rNote').value.trim()) || '';
