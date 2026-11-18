@@ -15,6 +15,12 @@ Kanban leve da equipe: **Backlog → A fazer → Fazendo → Revisão → Feito*
 - **Anexos:** arquivos de até 50 MB, guardados em bucket privado com links temporários, além de links (Drive, Figma, Notion).
 - Tema claro e escuro, busca, filtros ("Minhas", "Para eu revisar", "Prioridade alta") e atualização em tempo real.
 
+## Avisos
+
+- **Grupo do WhatsApp:** depois de criar uma tarefa, enviar para revisão, pedir ajustes ou concluir, aparece o botão **Avisar no grupo**. Ele abre o WhatsApp com a mensagem pronta (quem fez, o que mudou e o link direto da tarefa). É só escolher o grupo e enviar.
+- **Sininho de novidades:** mostra o que mudou desde a sua última visita: tarefas criadas por outras pessoas, pedidos de revisão para você, ajustes e aprovações nas suas tarefas e comentários.
+- **Link direto:** `…/jira/#MER-12` abre a tarefa.
+
 `?demo` no fim do link abre uma versão de teste com dados em memória, que não grava nada.
 
 ## Conectar no Claude ou no ChatGPT (MCP)

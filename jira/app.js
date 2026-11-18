@@ -13,6 +13,8 @@ const IC = {
   msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 12.3l2.7 2.7L16 9.6"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 004 0"/></svg>',
+  wa: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2A9.7 9.7 0 003.6 16.8L2.3 21.7l5-1.3A9.7 9.7 0 1012 2.2zm0 17.7a8 8 0 01-4.1-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1112 19.9zm4.4-6c-.2-.1-1.4-.7-1.7-.8-.2-.1-.4-.1-.5.1l-.8 1c-.1.2-.3.2-.5.1a6.6 6.6 0 01-3.3-2.9c-.2-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5a.9.9 0 00-.7.3 2.8 2.8 0 00-.9 2.1 4.9 4.9 0 001 2.6 11.2 11.2 0 004.3 3.8c1.6.7 2.2.7 3 .6a2.6 2.6 0 001.7-1.2 2.1 2.1 0 00.1-1.2c0-.1-.2-.2-.4-.3z"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
 };
 
@@ -180,6 +182,68 @@ function tick() {
 }
 function applyTheme(t) { document.documentElement.dataset.theme = t; $('meta[name=theme-color]').content = t === 'light' ? '#F8F6F1' : '#0F2420'; store.set('jira.theme', t); }
 
+/* ---------------- avisos: WhatsApp + novidades ---------------- */
+const APP_URL = location.origin + location.pathname;
+const linkTo = t => `${APP_URL}#${code(t)}`;
+function shareText(kind, t, extra) {
+  const p = PRI[t.priority] ? ` · prioridade ${PRI[t.priority].toLowerCase()}` : '';
+  if (kind === 'new') return `🆕 *Nova tarefa ${code(t)}*${p}\n${t.title}\nCriada por ${nm(S.me)} · responsável: ${t.owner_id ? nm(t.owner_id) : 'sem responsável'}\n${linkTo(t)}`;
+  if (kind === 'review') return `🔍 *${code(t)} aguarda revisão*\n${t.title}\nRevisores: ${extra.map(nm).join(', ')} · enviada por ${nm(S.me)}\n${linkTo(t)}`;
+  if (kind === 'changes') return `↩️ *Ajustes pedidos em ${code(t)}*\n${t.title}\n${nm(S.me)}: ${extra}\n${linkTo(t)}`;
+  if (kind === 'done') return `✅ *${code(t)} concluída*\n${t.title}\nResponsável: ${nm(t.owner_id)} · aprovada por ${(t.reviewers || []).map(nm).join(', ')}\n${linkTo(t)}`;
+  return '';
+}
+function offerShare(kind, t, extra) {
+  const text = shareText(kind, t, extra); if (!text) return;
+  const box = $('#share');
+  const title = { new: 'Avisar a equipe sobre a nova tarefa?', review: 'Avisar os revisores no grupo?', changes: 'Avisar o responsável no grupo?', done: 'Contar no grupo que foi concluída?' }[kind];
+  box.innerHTML = `<div class="sh-t"><b>${esc(title)}</b><span>${esc(code(t))} · ${esc(t.title)}</span></div>
+    <a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">${IC.wa}Avisar no grupo</a>
+    <button class="btn ghost sm" id="shareCopy">Copiar</button><button class="icon-btn" id="shareX" aria-label="Fechar">${IC.close}</button>`;
+  box.hidden = false; requestAnimationFrame(() => box.classList.add('on'));
+  const hide = () => { box.classList.remove('on'); setTimeout(() => { box.hidden = true; }, 200); };
+  $('#shareX').onclick = hide; $('a.wa', box).onclick = () => setTimeout(hide, 300);
+  $('#shareCopy').onclick = async () => { try { await navigator.clipboard.writeText(text); toast('Mensagem copiada.'); } catch (_) { toast('Não consegui copiar.'); } };
+  clearTimeout(offerShare.t); offerShare.t = setTimeout(hide, 20000);
+}
+const seenKey = () => 'jira.seen.' + S.me;
+function lastSeen() { const v = Number(store.get(seenKey())); if (v) return v; const d = Date.now() - 864e5; store.set(seenKey(), d); return d; }
+function events() {
+  const ev = [], me = S.me, week = Date.now() - 14 * 864e5;
+  const tk = id => S.tasks.find(t => t.id === id);
+  S.tasks.forEach(t => { if (t.created_by && t.created_by !== me && ts(t.created_at) > week)
+    ev.push({ at: ts(t.created_at), t, who: t.created_by, text: `criou ${code(t)}${t.owner_id === me ? ' para você' : ''}`, strong: t.owner_id === me }); });
+  S.comments.forEach(c => {
+    const t = tk(c.task_id); if (!t || c.author_id === me || ts(c.created_at) < week) return;
+    const mine = t.owner_id === me;
+    if (c.kind === 'review' && c.meta && (c.meta.to || []).includes(me)) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `pediu sua revisão em ${code(t)}`, strong: true });
+    else if (c.kind === 'changes' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `pediu ajustes em ${code(t)}`, strong: true });
+    else if (c.kind === 'approve' && mine) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `aprovou ${code(t)}` });
+    else if (c.kind === 'comment' && (mine || (t.reviewers || []).includes(me))) ev.push({ at: ts(c.created_at), t, who: c.author_id, text: `comentou em ${code(t)}` });
+  });
+  return ev.sort((a, b) => b.at - a.at).slice(0, 40);
+}
+function renderBell() {
+  const n = events().filter(e => e.at > lastSeen()).length;
+  $('#bellBtn').innerHTML = IC.bell + (n ? `<span class="dot">${n > 9 ? '9+' : n}</span>` : '');
+}
+function openBell() {
+  const ev = events(), seen = lastSeen(), m = $('#menu');
+  m.innerHTML = `<div style="padding:10px 12px 6px"><div class="eb" style="color:var(--mut2)">Novidades</div></div>` +
+    (ev.length ? ev.map((e, i) => `<button class="nt ${e.at > seen ? 'new' : ''}" data-ev="${i}">${av(e.who)}<span><b>${esc(first(e.who))}</b> ${esc(e.text)}<small>${esc(e.t.title)} · ${ago(new Date(e.at).toISOString())}</small></span></button>`).join('')
+      : '<div class="mut2 sm" style="padding:6px 12px 14px">Nada novo por aqui.</div>');
+  m.classList.add('bell'); m.hidden = false;
+  $$('[data-ev]', m).forEach(b => b.onclick = () => { m.hidden = true; openDrawer(ev[b.dataset.ev].t.id); });
+  store.set(seenKey(), Date.now()); renderBell();
+}
+function openFromHash() {
+  const h = decodeURIComponent(location.hash.slice(1)); const n = h.match(/^MER-(\d+)$/i);
+  if (!n || !S.me) return;
+  const t = S.tasks.find(x => String(x.number) === n[1]);
+  if (t && S.openId !== t.id) { S.lane = t.status; renderBoard(); openDrawer(t.id); }
+}
+window.addEventListener('hashchange', openFromHash);
+
 /* ---------------- login ---------------- */
 function renderLogin() {
   const box = $('#people');
@@ -210,6 +274,8 @@ function visible(t) {
 }
 function renderApp() {
   $('#meBtn').innerHTML = `${av(S.me)}<span>${esc(first(S.me))}</span>`;
+  renderBell();
+  if (!renderApp.hashDone && S.loaded) { renderApp.hashDone = true; setTimeout(openFromHash, 0); }
   $('#today').textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const week = Date.now() - 7 * 864e5;
   $('#stats').innerHTML = [
@@ -267,13 +333,14 @@ document.addEventListener('click', e => {
   const tb = e.target.closest('.tab[data-lane]'); if (tb) { S.lane = tb.dataset.lane; renderBoard(); return; }
   const nw = e.target.closest('[data-new]'); if (nw) { openNew(nw.dataset.new); return; }
   const c = e.target.closest('.card[data-id]'); if (c) { openDrawer(c.dataset.id); return; }
-  if (!e.target.closest('#menu') && !e.target.closest('#meBtn')) $('#menu').hidden = true;
+  if (!e.target.closest('#menu') && !e.target.closest('#meBtn') && !e.target.closest('#bellBtn')) $('#menu').hidden = true;
 });
 $('#newTop').onclick = () => openNew();
 $('#fab').onclick = () => openNew();
+$('#bellBtn').onclick = e => { e.stopPropagation(); const m = $('#menu'); if (!m.hidden && m.classList.contains('bell')) { m.hidden = true; return; } openBell(); };
 $('#themeBtn').onclick = () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
 $('#meBtn').onclick = () => {
-  const m = $('#menu');
+  const m = $('#menu'); m.classList.remove('bell');
   m.innerHTML = `<div style="padding:10px 12px 8px"><div class="eb" style="color:var(--mut2)">Conectado como</div><div class="serif" style="font-size:20px;margin-top:4px">${esc(nm(S.me))}</div></div><hr>
     <button id="mSwitch">Trocar de pessoa</button><button id="mTheme">Alternar tema claro/escuro</button>`;
   m.hidden = !m.hidden;
@@ -335,7 +402,7 @@ function openNew(lane) {
     try {
       const t = await api.createTask({ title, description: $('#nDesc').value.trim(), dod: items, status: $('#nLane').value, owner_id: $('#nOwner').value || null, priority: ($('#nPri .on') || {}).dataset.p || 'medium', created_by: S.me });
       for (const f of files) { try { await api.upload(t.id, f, S.me); } catch (e) { toast(`Não consegui enviar ${f.name}: ${errMsg(e)}`); } }
-      closeModal(); S.lane = t.status; await reload(); toast(`${code(t)} criada`); openDrawer(t.id);
+      closeModal(); S.lane = t.status; await reload(); toast(`${code(t)} criada`); openDrawer(t.id); offerShare('new', S.tasks.find(x => x.id === t.id) || t);
     } catch (e) { toast(errMsg(e)); $('#nGo').disabled = false; }
   };
 }
@@ -358,7 +425,7 @@ function openReviewChooser(t) {
       await api.updateTask(t.id, { status: 'review', reviewers: ids, approvals: {} });
       await api.addComment({ task_id: t.id, author_id: S.me, kind: 'review', body: note, meta: { to: ids } });
     }, `Enviada para revisão de ${ids.map(first).join(' e ')}`);
-    if (ok) { closeModal(); S.lane = 'review'; renderBoard(); } else $('#rqGo').disabled = false;
+    if (ok) { closeModal(); S.lane = 'review'; renderBoard(); offerShare('review', S.tasks.find(x => x.id === t.id) || t, ids); } else $('#rqGo').disabled = false;
   };
 }
 
@@ -368,6 +435,7 @@ const dirty = () => { const a = $('#dTitle'), b = $('#dDesc'); return !!(a && b 
 function openDrawer(id) {
   if (!S.tasks.find(t => t.id === id)) return;
   S.openId = id; base = null;
+  const tt = S.tasks.find(t => t.id === id); try { history.replaceState(null, '', '#' + code(tt)); } catch (_) {}
   const d = $('#drawer');
   d.innerHTML = `<div class="dr-head"><span class="lane-tag" id="dLane"></span><span class="mut2 sm" id="dCode" style="font-weight:700;letter-spacing:.06em"></span><span class="grow"></span><button class="icon-btn" id="dClose" aria-label="Fechar">${IC.close}</button></div>
   <div class="dr-body">
@@ -419,6 +487,7 @@ const cur = () => S.tasks.find(t => t.id === S.openId);
 function closeDrawer(force) {
   if (!force && S.openId && dirty()) { toast('Há alterações não salvas. Salve ou descarte.'); return; }
   $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); S.openId = null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
 }
 function fillDrawer() {
   const t = cur();
@@ -545,7 +614,7 @@ async function approve() {
   await act(async () => {
     const r = await api.approve(t.id, S.me, note);
     const row = Array.isArray(r) ? r[0] : r;
-    setTimeout(() => toast(row && row.status === 'done' ? 'Aprovada por todos. Movida para Feito.' : 'Aprovação registrada.'), 50);
+    setTimeout(() => { toast(row && row.status === 'done' ? 'Aprovada por todos. Movida para Feito.' : 'Aprovação registrada.'); if (row && row.status === 'done') offerShare('done', S.tasks.find(x => x.id === t.id) || row); }, 50);
   });
 }
 async function requestChanges() {
@@ -555,6 +624,7 @@ async function requestChanges() {
     await api.updateTask(t.id, { status: 'doing', approvals: {} });
     await api.addComment({ task_id: t.id, author_id: S.me, kind: 'changes', body: note });
   }, 'Ajustes pedidos. A tarefa voltou para Fazendo.');
+  offerShare('changes', S.tasks.find(x => x.id === t.id) || t, note);
 }
 
 boot();

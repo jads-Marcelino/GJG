@@ -225,7 +225,29 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
 .fab{display:none}
 .loading{padding:80px 20px;text-align:center;color:var(--mut2)}
 
+.bellb{position:relative}
+.bellb .dot{position:absolute;top:3px;right:2px;min-width:17px;height:17px;padding:0 4px;border-radius:100px;background:var(--coral);color:#1a0d08;font-size:10.5px;font-weight:800;display:grid;place-items:center;border:2px solid var(--bg)}
+.menu.bell{width:min(380px,calc(100vw - 32px));max-height:70vh;overflow:auto}
+.menu .nt{align-items:flex-start;gap:11px;line-height:1.35}
+.menu .nt>span:not(.av){flex:1;min-width:0}
+.menu .nt small{display:block;color:var(--mut2);font-size:12.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu .nt.new{background:color-mix(in srgb,var(--brass) 9%,transparent)}
+.menu .nt.new b::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--brass);margin:0 2px 2px 6px;vertical-align:middle}
+.share{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));z-index:70;transform:translate(-50%,16px);opacity:0;transition:all .2s;display:flex;align-items:center;gap:10px;width:min(560px,calc(100% - 24px));padding:12px 10px 12px 18px;background:var(--card);border:1px solid var(--line2);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.share.on{opacity:1;transform:translate(-50%,0)}
+.share .sh-t{flex:1;min-width:0;font-size:13px;color:var(--mut)}
+.share .sh-t b{display:block;color:var(--ink);font-size:14.5px}
+.share .sh-t span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn.wa{background:#25D366;border-color:#25D366;color:#06301a;text-decoration:none}
+.btn.wa svg{width:17px;height:17px}
 @media (max-width:860px){
+  .me{padding:3px;border-color:transparent}.me>span:not(.av){display:none}
+  .top-row{gap:6px}
+  .wordmark span.eb{display:none}
+  .share{flex-wrap:wrap;bottom:calc(84px + env(safe-area-inset-bottom))}
+  .share .sh-t{flex-basis:calc(100% - 50px)}
+  .share .btn.wa{flex:1}
+
   .top{padding:calc(10px + env(safe-area-inset-top)) 16px 0}
   .title-row{padding:14px 0 10px}
   .title-row h1{font-size:30px}
@@ -272,6 +294,7 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
     <div class="top-row">
       <div class="wordmark"><i></i><b>Meridiano</b><span class="eb">Quadro</span></div>
       <div class="grow"></div>
+      <button class="icon-btn bellb" id="bellBtn" title="Novidades" aria-label="Novidades"></button>
       <button class="icon-btn" id="themeBtn" title="Tema claro/escuro" aria-label="Alternar tema"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></button>
       <button class="me" id="meBtn"></button>
     </div>
@@ -290,6 +313,7 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.5}
 </section>
 
 <div class="menu" id="menu" hidden></div>
+<div class="share" id="share" hidden role="status"></div>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Detalhes da tarefa"></aside>
 <div class="modal" id="modal"><div class="mbox" id="mbox"></div></div>
