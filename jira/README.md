@@ -8,8 +8,8 @@ Kanban leve da equipe: **Backlog → A fazer → Fazendo → Revisão → Feito*
 
 - **Entrar:** escolha seu nome na tela inicial. O quadro lembra de você neste aparelho. Para trocar, toque no seu nome no canto superior direito.
 - **Responsável:** só quem é responsável pela tarefa a move entre as raias. Os demais comentam, anexam e editam o texto.
-- **Definição de pronto:** cada tarefa tem uma lista de critérios. Sem a lista, e sem todos os itens marcados, a tarefa não vai para Revisão nem para Feito. A regra também vale no banco de dados.
-- **Revisão:** o responsável escolhe quem valida. Quem revisa pode **aprovar** ou **pedir ajustes**. Pedir ajustes exige comentário e devolve a tarefa para Fazendo. Quando todos aprovam, a tarefa vai sozinha para Feito.
+- **Definição de pronto:** cada tarefa tem uma lista de critérios. Ela só é cobrada ao mover para Revisão ou para Feito. Nesses dois casos todos os itens precisam estar marcados. A regra também vale no banco de dados.
+- **Revisão (opcional):** se a tarefa precisa de validação, o responsável envia para Revisão e escolhe quem valida. Quem revisa pode **aprovar** ou **pedir ajustes**. Pedir ajustes exige comentário e devolve a tarefa para Fazendo. Quando todos aprovam, a tarefa vai sozinha para Feito. Se não precisa de validação, o responsável move direto para Feito.
 - **Prioridade:** Alta, Média ou Baixa. As tarefas de prioridade Alta ficam no topo de cada raia.
 - **Cronômetro:** iniciar coloca a tarefa em Fazendo. O cronômetro pausa sozinho quando a tarefa sai de Fazendo.
 - **Anexos:** arquivos de até 50 MB, guardados em bucket privado com links temporários, além de links (Drive, Figma, Notion).
@@ -36,7 +36,7 @@ https://oqokqkrczmdnhfwiwwdv.supabase.co/functions/v1/jira-mcp
 
 Depois é só pedir, por exemplo: *"Sou a Jeny Ventura. Crie uma tarefa de prioridade alta para revisar o contrato, com definição de pronto: cláusulas revisadas; versão final anexada."*
 
-Ferramentas: `list_members`, `list_tasks`, `get_task`, `create_task`, `update_task`, `move_task`, `set_definition_of_done`, `check_done_item`, `send_to_review`, `review_task`, `add_comment`, `timer`, `add_link`. Toda escrita informa quem está agindo (`person`) e segue as mesmas regras do app.
+Ferramentas: `list_members`, `list_tasks`, `get_task`, `create_task`, `update_task`, `move_task`, `set_definition_of_done`, `check_done_item`, `send_to_review`, `review_task`, `add_comment`, `timer`, `add_link`. Toda escrita informa quem está agindo (`person`) e segue as mesmas regras do app (`move_task` aceita `done` quando a definição de pronto está completa).
 
 ## Técnico
 

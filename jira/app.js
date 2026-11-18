@@ -110,8 +110,9 @@ function memApi() {
   const clone = o => JSON.parse(JSON.stringify(o));
   const guard = (old, nw) => {
     if (['review', 'done'].includes(nw.status) && (!old || old.status !== nw.status) && !dodOk(nw))
-      throw new Error('Defina e conclua a definição de pronto antes de enviar para ' + (nw.status === 'done' ? 'Feito' : 'Revisão'));
-    if (nw.status === 'done' && (!old || old.status !== 'review')) throw new Error('Uma tarefa só vai para Feito depois de aprovada na Revisão');
+      throw new Error('Defina e conclua a definição de pronto antes de mover para ' + (nw.status === 'done' ? 'Feito' : 'Revisão'));
+    if (nw.status === 'done' && old && old.status === 'review' && !(nw.reviewers || []).every(r => (nw.approvals || {})[r])) throw new Error('Em revisão, a tarefa só vai para Feito quando todos os revisores aprovarem');
+    if (nw.status === 'done' && (!old || old.status !== 'done')) { nw.done_at = now(); if (nw.timer_started_at) { nw.time_spent_ms += Date.now() - ts(nw.timer_started_at); nw.timer_started_at = null; } }
   };
   return {
     async loadAll() { return clone(db); },
@@ -190,7 +191,7 @@ function shareText(kind, t, extra) {
   if (kind === 'new') return `🆕 *Nova tarefa ${code(t)}*${p}\n${t.title}\nCriada por ${nm(S.me)} · responsável: ${t.owner_id ? nm(t.owner_id) : 'sem responsável'}\n${linkTo(t)}`;
   if (kind === 'review') return `🔍 *${code(t)} aguarda revisão*\n${t.title}\nRevisores: ${extra.map(nm).join(', ')} · enviada por ${nm(S.me)}\n${linkTo(t)}`;
   if (kind === 'changes') return `↩️ *Ajustes pedidos em ${code(t)}*\n${t.title}\n${nm(S.me)}: ${extra}\n${linkTo(t)}`;
-  if (kind === 'done') return `✅ *${code(t)} concluída*\n${t.title}\nResponsável: ${nm(t.owner_id)} · aprovada por ${(t.reviewers || []).map(nm).join(', ')}\n${linkTo(t)}`;
+  if (kind === 'done') return `✅ *${code(t)} concluída*\n${t.title}\nResponsável: ${nm(t.owner_id)}${(t.reviewers || []).length ? ' · aprovada por ' + t.reviewers.map(nm).join(', ') : ' · sem revisão'}\n${linkTo(t)}`;
   return '';
 }
 function offerShare(kind, t, extra) {
@@ -317,7 +318,7 @@ function card(t) {
   const run = !!t.timer_started_at, sp = spent(t);
   const rv = (t.status === 'review' || t.status === 'done') && (t.reviewers || []).length
     ? `<div class="rv">${t.reviewers.map(r => `<span class="rchip ${ap[r] ? 'ok' : ''}">${av(r, 'xs')}${esc(first(r))} ${ap[r] ? '✓' : '…'}</span>`).join('')}</div>` : '';
-  return `<article class="card" data-id="${esc(t.id)}" draggable="${canMove(t) && t.status !== 'review' && t.status !== 'done'}">
+  return `<article class="card" data-id="${esc(t.id)}" draggable="${canMove(t) && t.status !== 'review'}">
     <div class="k"><span>${esc(code(t))}</span><span class="prio ${esc(t.priority)}">${PRI[t.priority] || ''}</span><span class="sp"></span>
       ${sp > 0 || run ? `<span class="tm ${run ? 'run' : ''}" data-tid="${esc(t.id)}">${dur(sp)}</span>` : ''}</div>
     <h3>${esc(t.title)}</h3>
@@ -361,17 +362,18 @@ document.addEventListener('drop', e => { const col = e.target.closest && e.targe
 async function moveTask(t, to) {
   if (t.status === to) return;
   if (!canMove(t)) { toast(`Só ${first(t.owner_id)}, responsável pela tarefa, pode movê-la.`); return; }
-  if (to === 'done') { toast('A tarefa só vai para Feito depois de aprovada na Revisão.'); return; }
-  if (to === 'review') {
-    if (!dodOk(t)) { toast(dod(t).length ? 'Marque todos os itens da definição de pronto antes da revisão.' : 'Escreva a definição de pronto antes de enviar para revisão.'); openDrawer(t.id); setTimeout(() => { const el = $('#dodSec'); el && el.scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#dodNew') && $('#dodNew').focus(); }, 280); return; }
-    openReviewChooser(t); return;
+  if (to === 'done' && t.status === 'review') { toast('Em revisão, a tarefa vai para Feito quando todos aprovarem. Para concluir sem revisão, retire da revisão antes.'); return; }
+  if (to === 'review' || to === 'done') {
+    if (!dodOk(t)) { toast((dod(t).length ? 'Marque todos os itens da definição de pronto antes de ' : 'Escreva a definição de pronto antes de ') + (to === 'done' ? 'concluir.' : 'enviar para revisão.')); openDrawer(t.id); setTimeout(() => { const el = $('#dodSec'); el && el.scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#dodNew') && $('#dodNew').focus(); }, 280); return; }
+    if (to === 'review') { openReviewChooser(t); return; }
   }
   const ok = await act(async () => {
     if (t.timer_started_at && to !== 'doing') await api.timer(t.id, false);
     const patch = { status: to }; if (t.status === 'review') patch.approvals = {}; if (!t.owner_id) patch.owner_id = S.me;
+    if (to === 'done') { patch.reviewers = []; patch.approvals = {}; }
     await api.updateTask(t.id, patch);
-  }, t.status === 'review' ? 'Tarefa retirada da revisão' : null);
-  if (ok) { S.lane = to; renderBoard(); }
+  }, to === 'done' ? `${code(t)} concluída` : t.status === 'review' ? 'Tarefa retirada da revisão' : null);
+  if (ok) { S.lane = to; renderBoard(); if (to === 'done') offerShare('done', S.tasks.find(x => x.id === t.id) || t); }
 }
 
 /* ---------------- modal ---------------- */
@@ -385,7 +387,7 @@ function openNew(lane) {
     <label class="lb" for="nTitle">Título</label><input class="in" id="nTitle" maxlength="200" placeholder="Ex.: Revisar proposta do cliente">
     <label class="lb" for="nDesc">Descrição</label><textarea class="in" id="nDesc" rows="3" placeholder="Contexto, links, detalhes"></textarea>
     <label class="lb" for="nDod">Definição de pronto</label><textarea class="in" id="nDod" rows="3" style="min-height:80px" placeholder="Um critério por linha. Ex.:&#10;Cliente aprovou o escopo&#10;Arquivo final anexado"></textarea>
-    <div class="hint">Obrigatória para a tarefa ir para Revisão e Feito. Dá para completar depois.</div>
+    <div class="hint">Só é cobrada ao mover para Revisão ou Feito. Dá para escrever depois.</div>
     <div class="grid2"><div><label class="lb" for="nLane">Raia</label><select class="sel" id="nLane">${['backlog', 'todo', 'doing'].map(k => `<option value="${k}" ${k === start ? 'selected' : ''}>${LN[k]}</option>`).join('')}</select></div>
       <div><label class="lb" for="nOwner">Responsável</label><select class="sel" id="nOwner">${memberOpts(S.me)}</select></div></div>
     <label class="lb">Prioridade</label><div class="segs" id="nPri">${['high', 'medium', 'low'].map(k => `<button type="button" class="${k} ${k === 'medium' ? 'on' : ''}" data-p="${k}">${PRI[k]}</button>`).join('')}</div>
@@ -498,12 +500,12 @@ function fillDrawer() {
   const ti = $('#dTitle'), de = $('#dDesc');
   if (!dirty() && document.activeElement !== ti && document.activeElement !== de) { ti.value = t.title; de.value = t.description || ''; base = { title: ti.value, desc: de.value }; ti.style.height = 'auto'; ti.style.height = ti.scrollHeight + 'px'; }
   // lanes
-  $('#dLanes').innerHTML = LANES.map(([k, l]) => `<button class="${t.status === k ? 'on' : ''}" style="--lc:var(--l-${k})" data-mv="${k}" ${(!mov || k === 'done' || (t.status === 'done' && k === 'review')) && t.status !== k ? 'disabled' : ''}><i></i>${l}</button>`).join('');
+  $('#dLanes').innerHTML = LANES.map(([k, l]) => `<button class="${t.status === k ? 'on' : ''}" style="--lc:var(--l-${k})" data-mv="${k}" ${(!mov || (k === 'done' && t.status === 'review') || (t.status === 'done' && k === 'review')) && t.status !== k ? 'disabled' : ''}><i></i>${l}</button>`).join('');
   $$('#dLanes [data-mv]').forEach(b => b.onclick = () => moveTask(cur(), b.dataset.mv));
   $('#dHint').textContent = !mov ? `Só ${first(t.owner_id)}, responsável, move esta tarefa.`
     : t.status === 'review' ? 'Em revisão. Vai para Feito quando todos os revisores aprovarem.'
     : t.status === 'done' ? 'Concluída. Você pode reabrir movendo para outra raia.'
-    : 'Para concluir: complete a definição de pronto e envie para Revisão.';
+    : 'Com a definição de pronto completa: envie para Revisão ou, se não precisar de validação, mova direto para Feito.';
   const os = $('#dOwner'); os.innerHTML = memberOpts(t.owner_id); os.disabled = !mov || locked;
   $('#dPri').innerHTML = ['high', 'medium', 'low'].map(k => `<button type="button" class="${k} ${t.priority === k ? 'on' : ''}" data-p="${k}">${PRI[k]}</button>`).join('');
   $('#dCreated').textContent = `por ${first(t.created_by)} · ${ago(t.created_at)}`;

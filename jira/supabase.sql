@@ -1,8 +1,9 @@
 -- Meridiano · Quadro — esquema aplicado no Supabase (migrations jira_board_init, jira_task_number,
--- jira_definition_of_done, jira_grants_service_role). Referência; já está aplicado.
+-- jira_definition_of_done, jira_grants_service_role, jira_optional_review). Referência; já está aplicado.
 -- Tabelas: jira_members, jira_tasks (status, priority, owner_id, reviewers, approvals, dod, cronômetro, number),
 -- jira_comments, jira_files. Bucket privado: jira-files.
 -- Regras no banco:
---   * jira_guard_status (trigger): Revisão/Feito exigem definição de pronto completa; Feito só a partir de Revisão.
+--   * jira_guard_status (trigger): Revisão/Feito exigem definição de pronto completa; revisão é opcional, mas
+--     uma tarefa em Revisão só vai para Feito com todos os revisores aprovando; ao concluir, pausa o cronômetro.
 --   * jira_approve(task, member, note): registra aprovação; com todos aprovados, conclui.
 --   * jira_timer(task, start): liga/pausa o cronômetro no relógio do servidor.

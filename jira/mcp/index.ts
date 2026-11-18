@@ -2,8 +2,8 @@
 // Publicado como Supabase Edge Function "jira-mcp". Conecte no Claude (conector personalizado)
 // ou no ChatGPT (modo desenvolvedor) com a URL:
 //   https://oqokqkrczmdnhfwiwwdv.supabase.co/functions/v1/jira-mcp
-// Mesmas regras do app: só o responsável move a tarefa; Revisão exige definição de pronto completa
-// e revisores; Feito só por aprovação de todos os revisores.
+// Mesmas regras do app: só o responsável move a tarefa; Revisão e Feito exigem definição de pronto completa;
+// a revisão é opcional, mas uma tarefa em Revisão só vai para Feito com a aprovação de todos os revisores.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const sb = createClient(
@@ -113,9 +113,9 @@ const tools = [
     inputSchema: { type: "object", required: ["person", "task"], properties: {
       person: P, task: T, title: { type: "string" }, description: { type: "string" },
       priority: { type: "string", enum: ["high", "medium", "low"] }, owner: { type: "string" } } } },
-  { name: "move_task", description: "Move a tarefa entre backlog, todo e doing (só o responsável). Para Revisão use send_to_review; Feito só por aprovação.",
+  { name: "move_task", description: "Move a tarefa (só o responsável) para backlog, todo, doing ou done. Ir para done sem revisão exige definição de pronto completa; para pedir validação use send_to_review.",
     inputSchema: { type: "object", required: ["person", "task", "to"], properties: {
-      person: P, task: T, to: { type: "string", enum: ["backlog", "todo", "doing"] } } } },
+      person: P, task: T, to: { type: "string", enum: ["backlog", "todo", "doing", "done"] } } } },
   { name: "set_definition_of_done", description: "Substitui a lista de critérios de pronto da tarefa (todos desmarcados, a não ser que done=true).",
     inputSchema: { type: "object", required: ["person", "task", "items"], properties: {
       person: P, task: T, items: { type: "array", items: { type: "string" } } } } },
@@ -201,11 +201,13 @@ async function call(name: string, a: Record<string, any>): Promise<unknown> {
       const t = await task(a.task);
       const to = lane(a.to);
       if (to === "review") throw new UserError("Para Revisão use send_to_review, escolhendo os revisores.");
-      if (to === "done") throw new UserError("Uma tarefa só vai para Feito quando todos os revisores aprovam (review_task).");
       mustOwn(t, who);
+      if (to === "done" && t.status === "review") throw new UserError(`${code(t)} está em revisão: vai para Feito quando todos aprovarem. Para concluir sem revisão, mova antes para doing.`);
+      if (to === "done" && !dodOk(t)) throw new UserError("Complete a definição de pronto (todos os critérios marcados) antes de concluir.");
       if (t.timer_started_at && to !== "doing") check(await sb.rpc("jira_timer", { p_task: t.id, p_start: false }));
       const patch: Record<string, unknown> = { status: to };
       if (t.status === "review") patch.approvals = {};
+      if (to === "done") { patch.reviewers = []; patch.approvals = {}; }
       if (!t.owner_id) patch.owner_id = who.id;
       const u = check(await sb.from("jira_tasks").update(patch).eq("id", t.id).select().single()) as Task;
       return { moved: summary(u, ms) };
@@ -309,7 +311,7 @@ const CORS = {
   "Access-Control-Expose-Headers": "mcp-session-id",
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-const INSTRUCTIONS = `Quadro de tarefas da equipe Meridiano (raias: Backlog, A fazer, Fazendo, Revisão, Feito). Toda ação de escrita exige "person": o nome de quem está agindo — pergunte ao usuário quem ele é se não souber (use list_members). Regras: só o responsável move a tarefa; para ir a Revisão a definição de pronto precisa estar completa e é preciso escolher revisores; Feito só quando todos os revisores aprovam. Tarefas são referenciadas como MER-<número>. App: ${APP_URL}`;
+const INSTRUCTIONS = `Quadro de tarefas da equipe Meridiano (raias: Backlog, A fazer, Fazendo, Revisão, Feito). Toda ação de escrita exige "person": o nome de quem está agindo — pergunte ao usuário quem ele é se não souber (use list_members). Regras: só o responsável move a tarefa; Revisão e Feito exigem a definição de pronto completa; a revisão é opcional (send_to_review escolhe revisores), e uma tarefa em Revisão só vai para Feito quando todos aprovam. Tarefas são referenciadas como MER-<número>. App: ${APP_URL}`;
 
 async function handle(msg: any) {
   const { id, method, params } = msg ?? {};
