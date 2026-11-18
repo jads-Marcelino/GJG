@@ -13,6 +13,7 @@ Apresentações e fundos de reunião da Meridiano, para compartilhar.
 | Apresentação institucional · Light | https://jads-marcelino.github.io/GJG/apresentacoes/institucional/Meridiano-Institucional-light.html |
 | Apresentação institucional · Daylight | https://jads-marcelino.github.io/GJG/apresentacoes/institucional/Meridiano-Institucional-daylight.html |
 | Guias de discovery · planos de saúde (PT · EN · ES) | https://jads-marcelino.github.io/GJG/discovery/ |
+| Quadro de tarefas da equipe (kanban) | https://jads-marcelino.github.io/GJG/jira/ |
 | Assessments (resultados e cópias preenchidas) | https://jads-marcelino.github.io/GJG/assessments/ |
 | Guía de Discovery · Operación Sonrisa Panamá (PDF) | https://jads-marcelino.github.io/GJG/discovery/sonrisa/Guia-Discovery-Operacion-Sonrisa-Panama.pdf |
 | Fundos de reunião v2 (por sócio) | [`fundos-reuniao/v2/`](fundos-reuniao/v2/) |
